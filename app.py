@@ -3,20 +3,18 @@ import socket
 from functools import wraps
 from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash
 from flask_socketio import SocketIO
-# AGGIUNTO: Import per il sistema di login sicuro
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+# AGGIUNTO: Import per ElevenLabs e OS per la chiave API
+from elevenlabs.client import ElevenLabs
+import os
 
 # -------------------------------------------------------------------
 # NUOVA SEZIONE: CONFIGURAZIONE SICUREZZA E LOGIN
 # -------------------------------------------------------------------
 
-# In un'app reale, questa chiave sarebbe in una variabile d'ambiente e molto più complessa
-# È FONDAMENTALE per rendere sicure le sessioni di login
 SECRET_KEY_FLASK = "questa-chiave-deve-essere-super-segreta-e-difficile-da-indovinare-2025"
 
-# Semplice database utenti in memoria. In un'app più grande, si userebbe un database vero (es. SQLite, PostgreSQL)
-# La password è 'hashata'. Quella originale è 'adminpass'
 USERS_DB = {
     "admin": {
         "password_hash": generate_password_hash("adminpass"),
@@ -24,13 +22,11 @@ USERS_DB = {
     }
 }
 
-# Classe Utente richiesta da Flask-Login
 class User(UserMixin):
     def __init__(self, id, name):
         self.id = id
         self.name = name
 
-# Funzione per caricare un utente dalla nostra "DB"
 def get_user(user_id):
     if user_id in USERS_DB:
         return User(id=user_id, name=USERS_DB[user_id]["name"])
@@ -41,22 +37,30 @@ def get_user(user_id):
 # -------------------------------------------------------------------
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = SECRET_KEY_FLASK  # Configurazione chiave segreta per Flask
+app.config['SECRET_KEY'] = SECRET_KEY_FLASK
 socketio = SocketIO(app)
 
-# Configurazione di Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = 'login'  # Dice a Flask-Login qual è la pagina di login
+login_manager.login_view = 'login'
 login_manager.login_message = "Per favore, effettua il login per accedere a questa pagina."
 login_manager.login_message_category = "error"
+
+# AGGIUNTO: Inizializzazione del client di ElevenLabs
+# La chiave viene letta automaticamente dalla variabile d'ambiente ELEVEN_API_KEY
+try:
+    eleven_client = ElevenLabs()
+    print("Client ElevenLabs inizializzato con successo.")
+except Exception as e:
+    eleven_client = None
+    print(f"ATTENZIONE: Impossibile inizializzare il client ElevenLabs. Assicurati che la variabile d'ambiente 'ELEVEN_API_KEY' sia impostata. Errore: {e}")
+
 
 @login_manager.user_loader
 def load_user(user_id):
     return get_user(user_id)
 
 def get_local_ip():
-    # Questa funzione rimane utile per i test locali
     s = None
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -79,7 +83,6 @@ current_video_file = {'data': None, 'mimetype': None, 'name': None}
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
 # -------------------------------------------------------------------
 
-# AGGIUNTO: Template per la pagina di Login
 LOGIN_PAGE_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -131,7 +134,6 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# MODIFICATO: Pannello di controllo con Logout e senza logica 'secret'
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -447,21 +449,19 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
 
-    // Funzione per gestire l'autenticazione scaduta
     function handleAuthError() {
         alert("Sessione scaduta o non valida. Verrai reindirizzato alla pagina di login.");
         window.location.href = "{{ url_for('login') }}";
     }
 
-    // Wrapper per 'fetch' che controlla automaticamente gli errori di autenticazione
     async function fetchAuthenticated(url, options) {
         try {
             const response = await fetch(url, options);
-            if (response.status === 401) { // 401 Unauthorized, tipico di @login_required fallito
+            if (response.status === 401) { 
                 handleAuthError();
                 return null;
             }
-            if (response.redirected) { // Se il server ci ha reindirizzato (es. al login)
+            if (response.redirected) {
                  window.location.href = response.url;
                  return null;
             }
@@ -570,7 +570,7 @@ document.addEventListener('DOMContentLoaded', () => {
             body: formData
         });
 
-        if (!response) { // Gestione errore auth o rete
+        if (!response) {
              importVideoBtn.disabled = false;
              importVideoBtn.textContent = originalBtnText;
              return;
@@ -882,7 +882,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# MODIFICATO: Visualizzatore protetto da login
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1053,9 +1052,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const videoPlayerContainer = document.getElementById('video-player-container');
     let originalVideoVolume = 1.0;
-    let speechCheckInterval = null;
     let lastProgressUpdate = 0;
     let lastKnownState = {};
+    let announcementQueue = [];
+    let isAnnouncing = false;
 
     function applyAudioSettings(state) {
         const videoEl = document.getElementById('ad-video');
@@ -1139,14 +1139,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopIndicatorEl = document.getElementById('stop-indicator');
     const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
-    const synth = window.speechSynthesis;
-    let vociDisponibili = [];
-
     function duckVideoVolume() {
         const videoEl = document.getElementById('ad-video');
         if (videoEl && !videoEl.muted) {
             originalVideoVolume = videoEl.volume;
-            videoEl.volume = 0.2;
+            videoEl.volume = Math.min(originalVideoVolume, 0.2);
         }
     }
 
@@ -1157,52 +1154,66 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function manageAnnouncement(utterance) {
-        if (synth.speaking) synth.cancel();
-        if (speechCheckInterval) {
-            clearInterval(speechCheckInterval);
-            restoreVideoVolume();
+    async function processAnnouncementQueue() {
+        if (isAnnouncing || announcementQueue.length === 0) {
+            return;
         }
+        isAnnouncing = true;
+        
+        const textToSpeak = announcementQueue.shift();
+        
         duckVideoVolume();
-        synth.speak(utterance);
-        speechCheckInterval = setInterval(() => {
-            if (!synth.speaking) {
-                restoreVideoVolume();
-                clearInterval(speechCheckInterval);
-                speechCheckInterval = null;
+
+        try {
+            // L'interfaccia non cambia, chiama sempre lo stesso endpoint
+            const response = await fetch(`/synthesize-speech?text=${encodeURIComponent(textToSpeak)}`);
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Errore nella richiesta TTS: ${errorText}`);
             }
-        }, 100);
+
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            
+            audio.play();
+
+            audio.onended = () => {
+                restoreVideoVolume();
+                isAnnouncing = false;
+                processAnnouncementQueue();
+            };
+            audio.onerror = (e) => {
+                console.error("Errore durante la riproduzione dell'audio:", e);
+                restoreVideoVolume();
+                isAnnouncing = false;
+                processAnnouncementQueue();
+            };
+
+        } catch (error) {
+            console.error("Errore nel processo di annuncio:", error);
+            restoreVideoVolume();
+            isAnnouncing = false;
+            processAnnouncementQueue();
+        }
     }
 
-    function inizializzaSintesiVocale() {
-        const carica = () => { vociDisponibili = synth.getVoices(); };
-        if (synth.getVoices().length > 0) carica();
-        else synth.onvoiceschanged = carica;
-    }
-
-    function trovaVoceMigliore(lang) {
-        if (vociDisponibili.length === 0) return null;
-        let criteri = [ v => v.lang === lang && v.name.toLowerCase().includes('google'), v => v.lang === lang && !v.localService, v => v.lang === lang ];
-        for (const criterio of criteri) { const voce = vociDisponibili.find(criterio); if (voce) return voce; }
-        return vociDisponibili.find(v => v.lang.startsWith(lang.split('-')[0])) || null;
+    function queueAnnouncement(text) {
+        announcementQueue.push(text);
+        processAnnouncementQueue();
     }
 
     function annunciaFermata(stop) {
         if (!stop || !stop.name) return;
         const nomeCompletoFermata = `${stop.name}${stop.subtitle ? ', ' + stop.subtitle : ''}`;
-        const annuncio = new SpeechSynthesisUtterance(`Prossima fermata: ${nomeCompletoFermata}`);
-        annuncio.voice = trovaVoceMigliore('it-IT');
-        annuncio.lang = 'it-IT';
-        manageAnnouncement(annuncio);
+        const textToSpeak = `Prossima fermata: ${nomeCompletoFermata}`;
+        queueAnnouncement(textToSpeak);
     }
 
     function annunciaLineaDirezione(lineInfo) {
         if (!lineInfo || !lineInfo.line || !lineInfo.direction) return;
         const textToSpeak = `Linea ${lineInfo.line}, destinazione ${lineInfo.direction}`;
-        const annuncio = new SpeechSynthesisUtterance(textToSpeak);
-        annuncio.voice = trovaVoceMigliore('it-IT');
-        annuncio.lang = 'it-IT';
-        manageAnnouncement(annuncio);
+        queueAnnouncement(textToSpeak);
     }
     
     function adjustFontSize(element) {
@@ -1328,7 +1339,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state) updateDisplay(state);
     });
     
-    inizializzaSintesiVocale();
 });
 </script>
 </body>
@@ -1339,7 +1349,6 @@ document.addEventListener('DOMContentLoaded', () => {
 # 4. ROUTE E API WEBSOCKET (CON SICUREZZA POTENZIATA)
 # -------------------------------------------------------------------
 
-# NUOVA ROUTE: Pagina di Login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -1353,7 +1362,6 @@ def login():
         if user_in_db and check_password_hash(user_in_db['password_hash'], password):
             user = get_user(username)
             login_user(user)
-            # 'next' viene usato da Flask-Login per reindirizzare alla pagina richiesta prima del login
             next_page = request.args.get('next')
             return redirect(next_page or url_for('dashboard'))
         else:
@@ -1362,14 +1370,12 @@ def login():
             
     return render_template_string(LOGIN_PAGE_HTML)
 
-# NUOVA ROUTE: Logout
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('login'))
 
-# MODIFICATO: Route protette da @login_required
 @app.route('/')
 @login_required
 def dashboard():
@@ -1380,7 +1386,39 @@ def dashboard():
 def pagina_visualizzatore():
     return render_template_string(VISUALIZZATORE_COMPLETO_HTML)
 
-# MODIFICATO: API protette da @login_required
+
+# --- MODIFICATO: API PER SINTESI VOCALE CON ELEVENLABS ---
+
+@app.route('/synthesize-speech')
+@login_required
+def synthesize_speech():
+    text_to_speak = request.args.get('text', '')
+    if not text_to_speak:
+        return Response("Nessun testo fornito", status=400)
+
+    # Controlla se il client è stato inizializzato correttamente
+    if not eleven_client:
+        print("ERRORE: La chiave API di ElevenLabs non è configurata.")
+        return Response("Configurazione del server per la sintesi vocale incompleta.", status=500)
+
+    try:
+        # Genera l'audio usando il client di ElevenLabs
+        # Scegliamo una voce italiana predefinita, "Antoni" è un'ottima scelta.
+        # Puoi trovare altre voci nel tuo VoiceLab su elevenlabs.io
+        audio_stream = eleven_client.generate(
+            text=text_to_speak,
+            voice="Antoni", # Voce maschile italiana di alta qualità
+            model="eleven_multilingual_v2"
+        )
+
+        # Restituisce lo stream audio
+        return Response(audio_stream, mimetype='audio/mpeg')
+
+    except Exception as e:
+        print(f"Errore durante la chiamata a ElevenLabs: {e}")
+        return Response("Errore del servizio di sintesi vocale.", status=500)
+
+
 @app.route('/upload-video', methods=['POST'])
 @login_required
 def upload_video():
@@ -1413,10 +1451,9 @@ def clear_video():
 
 @socketio.on('connect')
 def handle_connect():
-    # MODIFICATO: Controllo di sicurezza all'atto della connessione WebSocket
     if not current_user.is_authenticated:
         print(f"Tentativo di connessione WebSocket non autorizzato.")
-        return False # Rifiuta la connessione
+        return False
         
     print(f"Client autorizzato connesso: {current_user.name} ({request.sid})")
     if current_app_state:
@@ -1429,7 +1466,6 @@ def handle_disconnect():
     else:
         print("Client non autenticato disconnesso.")
 
-# MODIFICATO: Anche gli eventi sono implicitamente protetti perché la connessione lo è
 @socketio.on('update_all')
 def handle_update_all(data):
     if not current_user.is_authenticated: return
@@ -1449,8 +1485,6 @@ def handle_request_initial_state():
 # -------------------------------------------------------------------
 
 if __name__ == '__main__':
-    # RIMOSSO: Tutta la logica di ngrok è stata eliminata.
-    
     local_ip = get_local_ip()
     print("================================================================")
     print("      SERVER HARZAFI POTENZIATO (v.Sicurezza) AVVIATO")
@@ -1461,9 +1495,10 @@ if __name__ == '__main__':
     print(f"Login:          http://127.0.0.1:5000/login")
     print("\n--- ACCESSO DALLA RETE LOCALE (STESSA RETE WIFI) ---")
     print(f"Login:          http://{local_ip}:5000/login")
+    print("\n--- IMPORTANTE: CONFIGURAZIONE VOCE (ELEVENLABS) ---")
+    print("Assicurati di aver impostato la variabile d'ambiente:")
+    print("ELEVEN_API_KEY")
     print("================================================================")
     print("Credenziali di default: admin / adminpass")
     
-    # Per il deploy su Render, gunicorn sarà il web server.
-    # Per i test locali, usiamo il server di sviluppo di Flask/SocketIO.
     socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
