@@ -882,6 +882,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
+# --- INIZIO BLOCCO CODICE CORRETTO ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -925,6 +926,30 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         #loader.hidden { opacity: 0; pointer-events: none; }
         
+        /* NUOVO: Stile per la schermata di attivazione audio */
+        #audio-unlock-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1001; /* Sopra a tutto il resto */
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; color: white;
+            background-color: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            cursor: pointer;
+            transition: opacity 0.5s ease-out;
+        }
+        #audio-unlock-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #audio-unlock-overlay h2 {
+            font-size: 4vw; font-weight: 900; margin: 0 0 20px 0;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+        #audio-unlock-overlay p {
+            font-size: 1.5vw; font-weight: 600; opacity: 0.9;
+            margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
         .main-content-wrapper { flex: 3; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 40px; }
         .video-wrapper { flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box; }
         .container { display: flex; align-items: center; width: 100%; max-width: 1400px; opacity: 0; transition: opacity 0.8s ease; }
@@ -1019,6 +1044,14 @@ VISUALIZZATORE_COMPLETO_HTML = """
         <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
         <p>CONNESSIONE AL SERVER...</p>
     </div>
+
+    <div id="audio-unlock-overlay">
+        <div>
+            <h2>Benvenuto a Bordo</h2>
+            <p>Clicca in un punto qualsiasi dello schermo per attivare gli annunci sonori.</p>
+        </div>
+    </div>
+
     <div class="main-content-wrapper">
         <div class="container">
             <div class="line-graphic">
@@ -1049,7 +1082,37 @@ VISUALIZZATORE_COMPLETO_HTML = """
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
-    
+
+    // --- INIZIO BLOCCO CORREZIONE AUDIO ---
+    const audioUnlockOverlay = document.getElementById('audio-unlock-overlay');
+    let isAudioUnlocked = false;
+
+    // Funzione per sbloccare l'audio dopo un'interazione dell'utente
+    function unlockAudio() {
+        if (isAudioUnlocked) return;
+        // La creazione e la riproduzione (anche fallita) di un audio vuoto
+        // in risposta a un click è sufficiente per i browser.
+        const silentAudio = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+        silentAudio.play().then(() => {
+            isAudioUnlocked = true;
+            console.log("Audio sbloccato con successo.");
+            audioUnlockOverlay.classList.add('hidden');
+            // Una volta sbloccato, chiediamo lo stato iniziale
+            loaderEl.querySelector('p').textContent = "CONNESSIONE IN CORSO...";
+            socket.emit('request_initial_state');
+        }).catch(error => {
+            console.warn("Tentativo di sblocco audio non riuscito, ma il gesto dell'utente è stato registrato. Gli annunci dovrebbero funzionare.", error);
+            isAudioUnlocked = true;
+            audioUnlockOverlay.classList.add('hidden');
+            loaderEl.querySelector('p').textContent = "CONNESSIONE IN CORSO...";
+            socket.emit('request_initial_state');
+        });
+    }
+
+    // Aggiungi l'evento click alla schermata di sblocco
+    audioUnlockOverlay.addEventListener('click', unlockAudio, { once: true });
+    // --- FINE BLOCCO CORREZIONE AUDIO ---
+
     const videoPlayerContainer = document.getElementById('video-player-container');
     let originalVideoVolume = 1.0;
     let lastProgressUpdate = 0;
@@ -1155,7 +1218,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function processAnnouncementQueue() {
-        if (isAnnouncing || announcementQueue.length === 0) {
+        if (isAnnouncing || announcementQueue.length === 0 || !isAudioUnlocked) {
             return;
         }
         isAnnouncing = true;
@@ -1165,7 +1228,6 @@ document.addEventListener('DOMContentLoaded', () => {
         duckVideoVolume();
 
         try {
-            // L'interfaccia non cambia, chiama sempre lo stesso endpoint
             const response = await fetch(`/synthesize-speech?text=${encodeURIComponent(textToSpeak)}`);
             if (!response.ok) {
                 const errorText = await response.text();
@@ -1248,7 +1310,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const { linesData, currentLineKey, currentStopIndex } = state;
 
         if (!linesData || !currentLineKey || currentStopIndex === null) {
-            loaderEl.classList.remove('hidden');
+            if (isAudioUnlocked) { // Mostra il loader solo se l'audio è stato sbloccato
+                loaderEl.classList.remove('hidden');
+                loaderEl.querySelector('p').textContent = "IN ATTESA DI DATI DAL PANNELLO...";
+            }
             containerEl.classList.remove('visible');
             logoEl.classList.remove('visible');
             return;
@@ -1312,8 +1377,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     socket.on('connect', () => {
         console.log('Connesso al server!');
-        loaderEl.querySelector('p').textContent = "CONNESSO. IN ATTESA DI DATI...";
-        socket.emit('request_initial_state');
+        if (!isAudioUnlocked) {
+            loaderEl.querySelector('p').textContent = "IN ATTESA DELL'ATTIVAZIONE AUDIO...";
+        } else {
+            loaderEl.querySelector('p').textContent = "CONNESSO. IN ATTESA DI DATI...";
+            socket.emit('request_initial_state');
+        }
     });
 
     socket.on('disconnect', () => {
@@ -1331,12 +1400,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('initial_state', (state) => {
         console.log('Stato iniziale ricevuto:', state);
-        if (state) updateDisplay(state);
+        if (state && isAudioUnlocked) updateDisplay(state);
     });
 
     socket.on('state_updated', (state) => {
         console.log('Stato aggiornato ricevuto:', state);
-        if (state) updateDisplay(state);
+        if (state && isAudioUnlocked) updateDisplay(state);
     });
     
 });
@@ -1344,6 +1413,8 @@ document.addEventListener('DOMContentLoaded', () => {
 </body>
 </html>
 """
+# --- FINE BLOCCO CODICE CORRETTO ---
+
 
 # -------------------------------------------------------------------
 # 4. ROUTE E API WEBSOCKET (CON SICUREZZA POTENZIATA)
