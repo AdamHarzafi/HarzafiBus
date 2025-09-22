@@ -1,13 +1,10 @@
 import sys
 import socket
 from functools import wraps
-from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash
+from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash, send_file
 from flask_socketio import SocketIO
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-# AGGIUNTO: Import per ElevenLabs e OS per la chiave API
-from elevenlabs.client import ElevenLabs
-import os
 
 # -------------------------------------------------------------------
 # NUOVA SEZIONE: CONFIGURAZIONE SICUREZZA E LOGIN
@@ -45,16 +42,6 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = "Per favore, effettua il login per accedere a questa pagina."
 login_manager.login_message_category = "error"
-
-# AGGIUNTO: Inizializzazione del client di ElevenLabs
-# La chiave viene letta automaticamente dalla variabile d'ambiente ELEVEN_API_KEY
-try:
-    eleven_client = ElevenLabs()
-    print("Client ElevenLabs inizializzato con successo.")
-except Exception as e:
-    eleven_client = None
-    print(f"ATTENZIONE: Impossibile inizializzare il client ElevenLabs. Assicurati che la variabile d'ambiente 'ELEVEN_API_KEY' sia impostata. Errore: {e}")
-
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -402,7 +389,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                         <p><strong>Destinazione:</strong> <span id="status-line-direction">N/D</span></p>
                     </div>
                 </div>
-                 <button id="announce-btn" title="Annuncia linea e destinazione" class="btn-primary" style="width:100%; margin-top: 20px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                 <button id="announce-btn" title="Annuncia" class="btn-primary" style="width:100%; margin-top: 20px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
                     <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
                     ANNUNCIA
                 </button>
@@ -712,7 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
             "4": { "direction": "STRADA DEL DROSSO", "stops": [{ "name": "FALCHERA CAP.", "subtitle": "" }, { "name": "STAZIONE STURA", "subtitle": "FS" }, { "name": "PIOSSASCO", "subtitle": "" }, { "name": "MASPONS", "subtitle": "" }, { "name": "BERTOLLA", "subtitle": "CIMITERO" }] },
             "29": { "direction": "PIAZZA SOLFERINO", "stops": [{ "name": "VALLETTE CAP.", "subtitle": "" }, { "name": "PRIMO NEBIOLO", "subtitle": "" }, { "name": "MOLVENO", "subtitle": "" }, { "name": "PIANEZZA", "subtitle": "C.SO REGINA MARGHERITA" }, { "name": "TRECATE", "subtitle": "" }] },
             "S8": { "direction": "OSPEDALE SAN GIOVANNI BOSCO", "stops": [{ "name": "STAZIONE LINGOTTO", "subtitle": "FS" }, { "name": "POLITECNICO", "subtitle": "" }, { "name": "STATI UNITI", "subtitle": "" }, { "name": "PORTA SUSA", "subtitle": "STAZIONE FS" }, { "name": "GIULIO CESARE", "subtitle": "MERCATO" }] },
-            "3": { "direction": "CORSA DEVIATA", "stops": [{ "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL" }, { "name": "PRIMULE   ", "subtitle": "" }, { "name": "PERVINCHE", "subtitle": "" }, { "name": "SANSOVINO", "subtitle": "" }, { "name": "CINCINNATO", "subtitle": "MERCATO RIONALE" }, { "name": "LOMBARDIA", "subtitle": "FERMATA PIU VICINA PER LA PISCINA LOMBARDIA" }, { "name": "BORSI", "subtitle": "" }, { "name": "LARGO TOSCANA", "subtitle": "" }, { "name": "LARGO BORGARO", "subtitle": "" }, { "name": "PIERO DELLA FRANCESCA", "FERMATA PIU VICINA PER IL MUSEO A COME AMBIENTE " }, { "name": "OSPEDALE AMEDEO DI SAVOIA", "subtitle": "UNIVERSITÀ - DIPARTIMENTO DI INFORMATICA" }, { "name": "TASSONI", "subtitle": "" }, { "name": "AVELLINO", "subtitle": "" }, { "name": "LIVORNO", "subtitle": "" }, { "name": "INDUSTRIA", "subtitle": "" }, { "name": "RONDÒ FORCA OVEST", "subtitle": "MARIA AUSILIATRICE" }, { "name": "OSPEDALE COTTOLENGO", "subtitle": "ANAGRAFE CENTRALE" }, { "name": "PORTA PALAZZO", "subtitle": "PIAZZA DELLA REPUBBLICA" }, { "name": "PORTA PALAZZO EST", "subtitle": "PIAZZA DELLA REPUBBLICA" }, { "name": "XI FEBBRAIO", "subtitle": "AUTOSTAZIONE DORA" }, { "name": "GIARDINI REALI", "subtitle": "RONDÒ RIVELLA" }, { "name": "ROSSINI", "subtitle": "MOLE ANTONELLIANA" }, { "name": "CAMPUS EINAUDI", "subtitle": "" }, { "name": "LARGO BERARDI", "subtitle": "" }, { "name": "OSPEDALE GRADENIGO", "subtitle": "" }, { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL" }] }] }
+            "3": { "direction": "CORSA DEVIATA", "stops": [{ "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL" }, { "name": "PRIMULE   ", "subtitle": "" }, { "name": "PERVINCHE", "subtitle": "" }, { "name": "SANSOVINO", "subtitle": "" }, { "name": "CINCINNATO", "subtitle": "MERCATO RIONALE" }, { "name": "LOMBARDIA", "subtitle": "FERMATA PIU VICINA PER LA PISCINA LOMBARDIA" }, { "name": "BORSI", "subtitle": "" }, { "name": "LARGO TOSCANA", "subtitle": "" }, { "name": "LARGO BORGARO", "subtitle": "" }, { "name": "PIERO DELLA FRANCESCA", "subtitle": "FERMATA PIU VICINA PER IL MUSEO A COME AMBIENTE" }, { "name": "OSPEDALE AMEDEO DI SAVOIA", "subtitle": "UNIVERSITÀ - DIPARTIMENTO DI INFORMATICA" }, { "name": "TASSONI", "subtitle": "" }, { "name": "AVELLINO", "subtitle": "" }, { "name": "LIVORNO", "subtitle": "" }, { "name": "INDUSTRIA", "subtitle": "" }, { "name": "RONDÒ FORCA OVEST", "subtitle": "MARIA AUSILIATRICE" }, { "name": "OSPEDALE COTTOLENGO", "subtitle": "ANAGRAFE CENTRALE" }, { "name": "PORTA PALAZZO", "subtitle": "PIAZZA DELLA REPUBBLICA" }, { "name": "PORTA PALAZZO EST", "subtitle": "PIAZZA DELLA REPUBBLICA" }, { "name": "XI FEBBRAIO", "subtitle": "AUTOSTAZIONE DORA" }, { "name": "GIARDINI REALI", "subtitle": "RONDÒ RIVELLA" }, { "name": "ROSSINI", "subtitle": "MOLE ANTONELLIANA" }, { "name": "CAMPUS EINAUDI", "subtitle": "" }, { "name": "LARGO BERARDI", "subtitle": "" }, { "name": "OSPEDALE GRADENIGO", "subtitle": "" }, { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL" }] }
         };
     }
     
@@ -842,7 +829,7 @@ document.addEventListener('DOMContentLoaded', () => {
     prevBtn.addEventListener('click', () => { if (currentStopIndex > 0) { currentStopIndex--; updateAndRenderStatus(); } });
     announceBtn.addEventListener('click', () => { 
         if (currentLineKey && linesData[currentLineKey]) {
-            const announcementData = { line: currentLineKey, direction: linesData[currentLineKey].direction, timestamp: Date.now() }; 
+            const announcementData = { timestamp: Date.now() }; 
             localStorage.setItem('busSystem-playAnnouncement', JSON.stringify(announcementData)); 
             sendFullStateUpdate();
         } else { alert('Nessuna linea attiva selezionata.'); } 
@@ -1055,8 +1042,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let originalVideoVolume = 1.0;
     let lastProgressUpdate = 0;
     let lastKnownState = {};
-    let announcementQueue = [];
-    let isAnnouncing = false;
 
     function applyAudioSettings(state) {
         const videoEl = document.getElementById('ad-video');
@@ -1154,69 +1139,27 @@ document.addEventListener('DOMContentLoaded', () => {
             videoEl.volume = originalVideoVolume;
         }
     }
-
-    async function processAnnouncementQueue() {
-        if (isAnnouncing || announcementQueue.length === 0) {
-            return;
-        }
-        isAnnouncing = true;
-        
-        const textToSpeak = announcementQueue.shift();
-        
-        duckVideoVolume();
-
-        try {
-            // L'interfaccia non cambia, chiama sempre lo stesso endpoint
-            const response = await fetch(`/synthesize-speech?text=${encodeURIComponent(textToSpeak)}`);
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Errore nella richiesta TTS: ${errorText}`);
-            }
-
-            const audioBlob = await response.blob();
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            
-            audio.play();
-
-            audio.onended = () => {
-                restoreVideoVolume();
-                isAnnouncing = false;
-                processAnnouncementQueue();
-            };
-            audio.onerror = (e) => {
-                console.error("Errore durante la riproduzione dell'audio:", e);
-                restoreVideoVolume();
-                isAnnouncing = false;
-                processAnnouncementQueue();
-            };
-
-        } catch (error) {
-            console.error("Errore nel processo di annuncio:", error);
-            restoreVideoVolume();
-            isAnnouncing = false;
-            processAnnouncementQueue();
-        }
-    }
-
-    function queueAnnouncement(text) {
-        announcementQueue.push(text);
-        processAnnouncementQueue();
-    }
-
-    function annunciaFermata(stop) {
-        if (!stop || !stop.name) return;
-        const nomeCompletoFermata = `${stop.name}${stop.subtitle ? ', ' + stop.subtitle : ''}`;
-        const textToSpeak = `Prossima fermata: ${nomeCompletoFermata}`;
-        queueAnnouncement(textToSpeak);
-    }
-
-    function annunciaLineaDirezione(lineInfo) {
-        if (!lineInfo || !lineInfo.line || !lineInfo.direction) return;
-        const textToSpeak = `Linea ${lineInfo.line}, destinazione ${lineInfo.direction}`;
-        queueAnnouncement(textToSpeak);
-    }
     
+    // NUOVA FUNZIONE PER RIPRODURRE L'AUDIO STATICO
+    function playStaticAnnouncement() {
+        duckVideoVolume(); // Abbassa il volume del video principale
+        
+        // Crea un nuovo oggetto Audio con il percorso del nostro file
+        const audio = new Audio('/announcement-audio');
+        audio.play();
+        
+        // Quando l'audio finisce, ripristina il volume del video
+        audio.onended = () => {
+            restoreVideoVolume();
+        };
+        
+        // In caso di errore, ripristina comunque il volume
+        audio.onerror = () => {
+            console.error("Impossibile riprodurre l'audio dell'annuncio.");
+            restoreVideoVolume();
+        };
+    }
+
     function adjustFontSize(element) {
         const maxFontSize = 140; const minFontSize = 40;
         element.style.fontSize = maxFontSize + 'px'; let currentFontSize = maxFontSize;
@@ -1258,8 +1201,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const isInitialLoad = !lastKnownState.currentLineKey;
         const lineChanged = lastKnownState.currentLineKey !== currentLineKey;
         const stopIndexChanged = lastKnownState.currentStopIndex !== currentStopIndex;
-        const playAnimation = !isInitialLoad && (lineChanged || stopIndexChanged);
-        const direction = (!isInitialLoad && stopIndexChanged && currentStopIndex < lastKnownState.currentStopIndex) ? 'prev' : 'next';
 
         loaderEl.classList.add('hidden');
         containerEl.classList.add('visible');
@@ -1277,7 +1218,8 @@ document.addEventListener('DOMContentLoaded', () => {
             adjustFontSize(stopNameEl);
         };
 
-        if (playAnimation) {
+        if (!isInitialLoad && (lineChanged || stopIndexChanged)) {
+            const direction = (!isInitialLoad && stopIndexChanged && currentStopIndex < lastKnownState.currentStopIndex) ? 'prev' : 'next';
             stopIndicatorEl.classList.add('exit');
             stopNameEl.classList.add('exit');
             setTimeout(() => {
@@ -1291,14 +1233,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     stopIndicatorEl.classList.remove('enter', 'enter-reverse');
                     stopNameEl.classList.remove('enter');
                 }, 500);
-                if(stop) annunciaFermata(stop);
             }, 400);
         } else {
             updateContent();
         }
 
+        // MODIFICATO: Chiama la nuova funzione per l'audio statico
         if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
-            annunciaLineaDirezione(state.announcement);
+            playStaticAnnouncement();
         }
 
         if (isInitialLoad || state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0)) {
@@ -1388,36 +1330,19 @@ def pagina_visualizzatore():
     return render_template_string(VISUALIZZATORE_COMPLETO_HTML)
 
 
-# --- MODIFICATO: API PER SINTESI VOCALE CON ELEVENLABS ---
-
-@app.route('/synthesize-speech')
+# --- MODIFICATO: ROUTE PER SERVIRE L'AUDIO DELL'ANNUNCIO STATICO ---
+@app.route('/announcement-audio')
 @login_required
-def synthesize_speech():
-    text_to_speak = request.args.get('text', '')
-    if not text_to_speak:
-        return Response("Nessun testo fornito", status=400)
-
-    # Controlla se il client è stato inizializzato correttamente
-    if not eleven_client:
-        print("ERRORE: La chiave API di ElevenLabs non è configurata.")
-        return Response("Configurazione del server per la sintesi vocale incompleta.", status=500)
-
+def announcement_audio():
+    """
+    Questa route serve il file audio statico per l'annuncio.
+    Il file deve trovarsi nella stessa cartella di app.py.
+    """
     try:
-        # Genera l'audio usando il client di ElevenLabs
-        # Scegliamo una voce italiana predefinita, "Antoni" è un'ottima scelta.
-        # Puoi trovare altre voci nel tuo VoiceLab su elevenlabs.io
-        audio_stream = eleven_client.generate(
-            text=text_to_speak,
-            voice="Antoni", # Voce maschile italiana di alta qualità
-            model="eleven_multilingual_v2"
-        )
-
-        # Restituisce lo stream audio
-        return Response(audio_stream, mimetype='audio/mpeg')
-
-    except Exception as e:
-        print(f"Errore durante la chiamata a ElevenLabs: {e}")
-        return Response("Errore del servizio di sintesi vocale.", status=500)
+        return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
+    except FileNotFoundError:
+        print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
+        return Response("File audio dell'annuncio non trovato sul server.", status=404)
 
 
 @app.route('/upload-video', methods=['POST'])
@@ -1488,17 +1413,16 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("================================================================")
-    print("      SERVER HARZAFI POTENZIATO (v.Sicurezza) AVVIATO")
+    print("      SERVER HARZAFI POTENZIATO (v.Audio Statico) AVVIATO")
     print("================================================================")
     print("MODALITA' DI ESECUZIONE: Locale (per test)")
-    print("Per l'accesso online, segui la guida per il deploy su Render.")
     print("\n--- ACCESSO LOCALE (dalla stessa macchina) ---")
     print(f"Login:          http://127.0.0.1:5000/login")
     print("\n--- ACCESSO DALLA RETE LOCALE (STESSA RETE WIFI) ---")
     print(f"Login:          http://{local_ip}:5000/login")
-    print("\n--- IMPORTANTE: CONFIGURAZIONE VOCE (ELEVENLABS) ---")
-    print("Assicurati di aver impostato la variabile d'ambiente:")
-    print("ELEVEN_API_KEY")
+    print("\n--- IMPORTANTE ---")
+    print("L'annuncio ora usa il file 'LINEA 3. CORSA DEVIATA..mp3'.")
+    print("Assicurati che sia presente nella stessa cartella del server.")
     print("================================================================")
     print("Credenziali di default: admin / adminpass")
     
