@@ -4,4 +4,3 @@ Flask-Login
 gunicorn
 eventlet
 werkzeug
-elevenlabs
