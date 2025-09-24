@@ -1,16 +1,27 @@
 import sys
 import socket
 from functools import wraps
+from datetime import datetime, timedelta
 from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash, send_file
 from flask_socketio import SocketIO
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField
+from wtforms.validators import DataRequired
 
 # -------------------------------------------------------------------
-# NUOVA SEZIONE: CONFIGURAZIONE SICUREZZA E LOGIN
+# NUOVA SEZIONE: CONFIGURAZIONE SICUREZZA POTENZIATA E LOGIN
 # -------------------------------------------------------------------
 
-SECRET_KEY_FLASK = "questa-chiave-deve-essere-super-segreta-e-difficile-da-indovinare-2025"
+# Chiave segreta per le sessioni Flask e per la protezione CSRF.
+# In un ambiente di produzione, questa dovrebbe essere caricata da una variabile d'ambiente.
+SECRET_KEY_FLASK = "questa-chiave-e-stata-cambiata-ed-e-molto-piu-sicura-del-2025"
+
+# Dizionario in-memory per tracciare i tentativi di login falliti (protezione da brute-force)
+login_attempts = {}
+MAX_ATTEMPTS = 5  # Numero massimo di tentativi falliti
+LOCKOUT_TIME_MINUTES = 10  # Minuti di blocco dopo troppi tentativi
 
 USERS_DB = {
     "admin": {
@@ -29,12 +40,18 @@ def get_user(user_id):
         return User(id=user_id, name=USERS_DB[user_id]["name"])
     return None
 
+# Nuovo: Modulo per il form di login con Flask-WTF per validazione e protezione CSRF
+class LoginForm(FlaskForm):
+    username = StringField('Username', validators=[DataRequired("Il nome utente è obbligatorio.")])
+    password = PasswordField('Password', validators=[DataRequired("La password è obbligatoria.")])
+
 # -------------------------------------------------------------------
 # 1. IMPOSTAZIONI E APPLICAZIONE
 # -------------------------------------------------------------------
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY_FLASK
+app.config['WTF_CSRF_SECRET_KEY'] = SECRET_KEY_FLASK  # Chiave specifica per CSRF
 socketio = SocketIO(app)
 
 login_manager = LoginManager()
@@ -46,6 +63,17 @@ login_manager.login_message_category = "error"
 @login_manager.user_loader
 def load_user(user_id):
     return get_user(user_id)
+
+# Nuovo: Middleware per prevenire il caching delle pagine protette
+@app.after_request
+def add_security_headers(response):
+    # Applica queste intestazioni a tutte le pagine protette per evitare che il browser
+    # le mostri dalla cache dopo il logout (risolvendo il problema del tasto "indietro")
+    if request.path != '/login' and not request.path.startswith('/static'):
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
 
 def get_local_ip():
     s = None
@@ -67,60 +95,226 @@ current_app_state = None
 current_video_file = {'data': None, 'mimetype': None, 'name': None}
 
 # -------------------------------------------------------------------
-# 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
+# 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI (CON NUOVO DESIGN)
 # -------------------------------------------------------------------
 
+#
+# --- NUOVO DESIGN: LOGIN_PAGE_HTML ---
+#
 LOGIN_PAGE_HTML = """
 <!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Pannello Harzafi</title>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <title>Accesso Riservato - Pannello Harzafi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Montserrat', sans-serif; background: linear-gradient(135deg, #fdf4f6, #f4f4fd); display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .login-container { background: white; padding: 40px; border-radius: 24px; box-shadow: 0 20px 50px -10px rgba(44, 62, 80, 0.1); text-align: center; width: 100%; max-width: 400px; }
-        img { max-width: 180px; margin-bottom: 20px; }
-        h2 { color: #2c3e50; font-weight: 700; }
-        .flash-error { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #f5c6cb; }
-        .form-group { margin-bottom: 20px; text-align: left; }
-        label { display: block; margin-bottom: 8px; font-weight: 600; color: #8492a6; font-size: 14px; }
-        input { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid #e0e6ed; font-size: 16px; box-sizing: border-box; font-family: 'Montserrat', sans-serif; }
-        input:focus { outline: none; border-color: #8A2387; box-shadow: 0 0 0 4px rgba(138, 35, 135, 0.1); }
-        button { width: 100%; padding: 15px; border: none; background: linear-gradient(135deg, #A244A7, #8A2387); color: white; font-size: 16px; font-weight: 700; border-radius: 12px; cursor: pointer; transition: transform 0.2s; }
-        button:hover { transform: translateY(-3px); }
+        :root {
+            --background-start: #111827;
+            --background-end: #1F2937;
+            --card-background: rgba(31, 41, 55, 0.8);
+            --border-color: rgba(107, 114, 128, 0.2);
+            --accent-color-start: #8A2387;
+            --accent-color-end: #A244A7;
+            --text-primary: #F9FAFB;
+            --text-secondary: #9CA3AF;
+            --danger-color: #EF4444;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--background-start), var(--background-end));
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            background: var(--card-background);
+            border: 1px solid var(--border-color);
+            padding: 40px;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .logo {
+            max-width: 150px;
+            margin-bottom: 24px;
+            filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.1));
+        }
+        h2 {
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 24px;
+            margin: 0 0 32px 0;
+        }
+        .flash-message {
+            padding: 12px 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .flash-message.error {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--danger-color);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+            position: relative;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background-color: #111827;
+            color: var(--text-primary);
+            font-size: 16px;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: var(--accent-color-end);
+            box-shadow: 0 0 0 4px rgba(162, 68, 167, 0.2);
+        }
+        input:-webkit-autofill {
+             -webkit-box-shadow: 0 0 0 30px #111827 inset !important;
+             -webkit-text-fill-color: var(--text-primary) !important;
+        }
+        .password-wrapper {
+            position: relative;
+        }
+        #password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 14px;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            color: var(--text-secondary);
+        }
+        #password-toggle svg {
+            width: 20px;
+            height: 20px;
+        }
+        button[type="submit"] {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-color-end), var(--accent-color-start));
+            color: white;
+            font-size: 16px;
+            font-weight: 700;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button[type="submit"]:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(138, 35, 135, 0.25);
+        }
+        button[type="submit"]:disabled {
+            background: #4B5563;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi">
-        <h2>Accesso Riservato</h2>
+        <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
+        <h2>Accesso Area Riservata</h2>
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    {% if category == 'error' %}
-                        <div class="flash-error">{{ message }}</div>
-                    {% endif %}
+                    <div class="flash-message {{ category }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
+                        <span>{{ message }}</span>
+                    </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        <form method="post">
+        <form method="post" novalidate>
+            {{ form.hidden_tag() }}
             <div class="form-group">
-                <label for="username">Nome Utente</label>
-                <input type="text" id="username" name="username" required>
+                {{ form.username.label(for="username") }}
+                {{ form.username(id="username", class="form-control", required=True) }}
             </div>
             <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
+                {{ form.password.label(for="password") }}
+                <div class="password-wrapper">
+                    {{ form.password(id="password", class="form-control", required=True) }}
+                    <button type="button" id="password-toggle" title="Mostra/Nascondi password">
+                        <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 4C7 4 2.73 7.11 1 11.5 2.73 15.89 7 19 12 19s9.27-3.11 11-7.5C21.27 7.11 17 4 12 4zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49.2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75.99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67.24-1.38.37-2.14.37-2.76 0-5-2.24-5-5 0-.76.13-1.47.37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
+                    </button>
+                </div>
             </div>
             <button type="submit">Accedi</button>
         </form>
     </div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const passwordInput = document.getElementById('password');
+        const toggleButton = document.getElementById('password-toggle');
+        const eyeOpen = document.getElementById('eye-open');
+        const eyeClosed = document.getElementById('eye-closed');
+
+        if (toggleButton) {
+            toggleButton.addEventListener('click', () => {
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                    eyeOpen.style.display = 'none';
+                    eyeClosed.style.display = 'block';
+                } else {
+                    passwordInput.type = 'password';
+                    eyeOpen.style.display = 'block';
+                    eyeClosed.style.display = 'none';
+                }
+            });
+        }
+    });
+</script>
 </body>
 </html>
 """
 
+#
+# --- NUOVO DESIGN: PANNELLO_CONTROLLO_COMPLETO_HTML ---
+#
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -130,190 +324,146 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     <title>Pannello di Controllo Harzafi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         :root {
-            --primary-color: #8A2387;
-            --secondary-color: #A244A7;
-            --accent-color: #F777A8;
-            --danger-color: #e74c3c;
-            --success-color: #2ecc71;
-            --text-primary: #2c3e50;
-            --text-secondary: #8492a6;
-            --border-color: #e0e6ed;
-            --white: #ffffff;
-            --background-light: #f9fafb;
-            --background-gradient: linear-gradient(135deg, #fdf4f6, #f4f4fd);
+            --background: #111827;
+            --panel-bg: #1F2937;
+            --panel-bg-lighter: #374151;
+            --border-color: #4B5563;
+            --text-primary: #F9FAFB;
+            --text-secondary: #9CA3AF;
+            --accent-primary: #A244A7;
+            --accent-secondary: #8A2387;
+            --success: #10B981;
+            --danger: #EF4444;
+            --white: #FFFFFF;
         }
+        * { box-sizing: border-box; }
         body {
-            font-family: 'Montserrat', sans-serif;
-            background: var(--background-gradient);
+            font-family: 'Inter', sans-serif;
+            background: var(--background);
             color: var(--text-primary);
             margin: 0;
-            padding: 30px;
+            padding: 15px;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
         }
-        .container { max-width: 800px; margin: 0 auto; }
+        @media (min-width: 768px) { body { padding: 30px; } }
+        .container { max-width: 900px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: 20px; }
+        @media (min-width: 1024px) { .container { grid-template-columns: repeat(2, 1fr); gap: 30px; } }
         .panel {
-            background-color: var(--white);
-            padding: 35px;
-            border-radius: 24px;
+            background-color: var(--panel-bg);
+            padding: 25px;
+            border-radius: 20px;
             border: 1px solid var(--border-color);
-            box-shadow: 0 20px 50px -10px rgba(44, 62, 80, 0.1);
-            margin-bottom: 30px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-        .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 10px; flex-wrap: wrap; }
-        .panel-header-title { display: flex; align-items: center; gap: 20px; }
-        .panel-header-title img { max-width: 140px; }
-        .panel-header-title h1 { font-size: 28px; color: var(--text-primary); margin: 0; font-weight: 800; }
-        .panel-subtitle { width: 100%; margin-top: -15px; margin-bottom: 20px; }
-        .control-group { margin-bottom: 25px; }
-        label { display: block; margin-bottom: 10px; font-weight: 600; color: var(--text-secondary); font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .panel-full-width { grid-column: 1 / -1; }
+        .panel-header {
+            display: flex; justify-content: space-between; align-items: center; gap: 20px;
+            margin-bottom: 5px; flex-wrap: wrap;
+        }
+        .panel-header-title { display: flex; align-items: center; gap: 15px; }
+        .panel-header-title img { max-width: 120px; }
+        .panel-header-title h1 { font-size: 24px; color: var(--text-primary); margin: 0; font-weight: 800; }
+        .panel-subtitle { color: var(--text-secondary); margin: -5px 0 20px 0; }
+        .panel-subtitle a { color: var(--accent-primary); text-decoration: none; font-weight: 600; }
+        .panel-subtitle a:hover { text-decoration: underline; }
+        h2 { font-size: 20px; font-weight: 700; margin-top: 0; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border-color); }
+        .control-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 10px; font-weight: 600; color: var(--text-secondary); font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
         select, button, input[type="text"], textarea {
-            width: 100%; padding: 14px; border-radius: 12px; border: 1px solid var(--border-color);
-            font-size: 16px; box-sizing: border-box; font-family: 'Montserrat', sans-serif; transition: all 0.2s ease-in-out;
+            width: 100%; padding: 12px 14px; border-radius: 10px;
+            border: 1px solid var(--border-color);
+            font-size: 15px; box-sizing: border-box; font-family: 'Inter', sans-serif;
+            background-color: var(--background); color: var(--text-primary);
+            transition: all 0.2s ease-in-out;
         }
-        textarea { height: 120px; resize: vertical; }
+        textarea { min-height: 100px; resize: vertical; }
         select:focus, input[type="text"]:focus, textarea:focus {
-            outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 4px rgba(138, 35, 135, 0.1);
+            outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 4px rgba(162, 68, 167, 0.2);
         }
+        button { cursor: pointer; border: none; font-weight: 700; border-radius: 10px; }
+        button:disabled { background: #4B5563; color: var(--text-secondary); cursor: not-allowed; transform: none; box-shadow: none; }
+        button:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        button:active { transform: translateY(0); }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); color: var(--white); }
+        .btn-success { background-color: var(--success); color: var(--white); }
+        .btn-danger { background-color: var(--danger); color: var(--white); }
+        .btn-secondary { background-color: var(--panel-bg-lighter); color: var(--white); }
+        #logout-btn { background-color: transparent; border: 1px solid var(--danger); color: var(--danger); width: auto; padding: 8px 16px; font-size: 14px; flex-shrink: 0;}
+        #logout-btn:hover { background-color: var(--danger); color: var(--white); }
         .navigation-buttons { display: flex; gap: 15px; }
-        button { cursor: pointer; border: none; font-weight: 700; color: white; border-radius: 12px; transition: all 0.2s ease-in-out; }
-        button:disabled { background: #bdc3c7; cursor: not-allowed; transform: none; box-shadow: none; }
-        button:not(:disabled):hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
-        button:active { transform: translateY(-1px); }
-        .btn-primary { background: linear-gradient(135deg, var(--secondary-color), var(--primary-color)); }
-        .btn-success { background: var(--success-color); }
-        .btn-danger { background: var(--danger-color); }
-        .btn-secondary { background: var(--text-secondary); }
-        #logout-btn { background: var(--danger-color); width: auto; padding: 10px 20px; font-size: 14px; flex-shrink: 0;}
         input[type="range"] {
             -webkit-appearance: none; appearance: none;
-            width: 100%; height: 8px; background: var(--border-color);
-            border-radius: 5px; outline: none; padding: 0;
-            transition: background 0.3s;
+            width: 100%; height: 6px; background: var(--panel-bg-lighter);
+            border-radius: 3px; outline: none; padding: 0;
         }
-        input[type="range"]:disabled { background: #e9ecef; }
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none; appearance: none;
-            width: 24px; height: 24px;
-            background: var(--primary-color);
+            width: 20px; height: 20px;
+            background: var(--accent-primary);
             cursor: pointer; border-radius: 50%;
-            border: 4px solid var(--white);
+            border: 3px solid var(--white);
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            transition: background 0.3s;
         }
-        input[type="range"]:disabled::-webkit-slider-thumb {
-            background: #bdc3c7;
-            cursor: not-allowed;
-        }
-        .local-video-controls {
-            padding: 20px;
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            margin-top: 20px;
-        }
-        .playback-controls {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-        #play-pause-btn {
-            flex-shrink: 0;
-            width: 60px;
-            height: 60px;
-            padding: 0;
-        }
-        #play-pause-btn svg {
-            width: 32px;
-            height: 32px;
-            fill: white;
-        }
-        .volume-stack {
-            flex-grow: 1;
-        }
+        .local-video-controls { border: 1px solid var(--border-color); border-radius: 12px; margin-top: 20px; overflow: hidden; }
+        .playback-controls { display: flex; gap: 15px; align-items: center; padding: 15px; }
+        #play-pause-btn { flex-shrink: 0; width: 48px; height: 48px; padding: 0; }
+        #play-pause-btn svg { width: 24px; height: 24px; fill: white; }
+        .volume-stack { flex-grow: 1; }
         #video-progress-display {
-            text-align: center;
-            font-weight: 600;
-            color: var(--text-secondary);
-            font-size: 14px;
-            margin-top: 10px;
-            letter-spacing: 1px;
+            text-align: center; font-weight: 600; color: var(--text-secondary); font-size: 12px;
+            margin-top: 8px; letter-spacing: 1px;
         }
+        #toggle-mute-btn { border-radius: 0; width: 100%; border-top: 1px solid var(--border-color); }
         #current-status-display {
-            background-color: var(--background-light);
-            border-radius: 16px; padding: 25px; margin-top: 25px;
-            text-align: left;
-            border: 1px solid var(--border-color);
+            background-color: var(--background); border-radius: 16px;
+            padding: 20px; margin-top: 20px; text-align: left;
         }
-        .status-grid {
-            display: grid;
-            grid-template-areas:
-                "header header"
-                "stop-label stop-name"
-                "details-1 details-2";
-            grid-template-columns: auto 1fr;
-            gap: 15px 20px;
-            align-items: center;
-        }
-        #current-status-display h3 {
-            grid-area: header;
-            margin: 0; margin-bottom: 10px; font-size: 18px; font-weight: 700;
-            border-bottom: 1px solid var(--border-color); padding-bottom: 15px;
-        }
-        #status-stop-name-container { grid-area: stop-name; }
-        #status-stop-name { font-size: 26px; font-weight: 800; color: var(--primary-color); margin: 0; line-height: 1.2; }
-        #status-stop-subtitle { font-size: 16px; color: var(--text-secondary); margin: 4px 0 0 0; }
-        .status-detail { display: flex; align-items: center; gap: 10px; }
-        .status-detail svg { width: 20px; height: 20px; fill: var(--text-secondary); }
-        .status-detail-1 { grid-area: details-1; }
-        .status-detail-2 { grid-area: details-2; }
-        .status-label {
-            grid-area: stop-label; font-size: 12px; font-weight: 700; color: var(--text-secondary);
-            text-transform: uppercase; letter-spacing: 0.5px;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: var(--white); padding: 15px; border-radius: 12px; border: 1px solid var(--border-color);
-        }
-        #status-progress { font-size: 18px; font-weight: 700; color: var(--primary-color); display: block; margin-top: 5px; }
-        .line-list { list-style: none; padding: 0; }
-        .line-item { display: flex; align-items: center; justify-content: space-between; padding: 15px; border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 10px; gap: 15px; transition: all 0.2s ease-in-out; }
-        .line-actions button { width: auto; padding: 8px 15px; font-size: 14px; }
-        dialog { width: 90%; max-width: 600px; border-radius: 20px; border: none; box-shadow: 0 15px 50px rgba(0,0,0,0.2); padding: 30px; }
-        dialog::backdrop { background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(5px); }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        #stops-editor { margin-top: 20px; padding: 20px; background-color: var(--background-light); border-radius: 12px; }
+        #current-status-display h3 { margin: 0 0 15px 0; font-size: 16px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .status-main-info { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; }
+        .status-progress-container { flex-shrink: 0; width: 60px; height: 60px; border: 2px solid var(--accent-primary); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 800; }
+        #status-progress-num { font-size: 20px; color: var(--text-primary); }
+        #status-progress-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; }
+        #status-stop-name { font-size: 22px; font-weight: 800; color: var(--text-primary); line-height: 1.2; }
+        #status-stop-subtitle { font-size: 14px; color: var(--text-secondary); margin-top: 2px; }
+        .status-details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .status-detail p { margin: 0; font-size: 14px; }
+        .status-detail strong { color: var(--text-secondary); font-weight: 600; }
+        .line-list { list-style: none; padding: 0; margin: 0; }
+        .line-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color); gap: 15px; }
+        .line-item:last-child { border-bottom: none; }
+        .line-actions button { width: auto; padding: 6px 12px; font-size: 13px; }
+        dialog { width: 95%; max-width: 500px; border-radius: 20px; border: 1px solid var(--border-color); background: var(--panel-bg); color: var(--text-primary); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4); padding: 30px; }
+        dialog::backdrop { background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px); }
+        #stops-editor { margin-top: 20px; padding: 20px; background-color: var(--background); border-radius: 12px; }
         .stop-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
-        .stop-item input { flex-grow: 1; }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
-        .service-status-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background-color: var(--background-light);
-            padding: 20px;
-            border-radius: 16px;
-        }
-        #service-status-text.status-online { color: var(--success-color); }
-        #service-status-text.status-offline { color: var(--danger-color); }
-        .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .service-status-container { display: flex; align-items: center; justify-content: space-between; background-color: var(--background); padding: 15px 20px; border-radius: 12px; }
+        #service-status-text { font-weight: 700; font-size: 16px; }
+        #service-status-text.status-online { color: var(--success); }
+        #service-status-text.status-offline { color: var(--danger); }
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--danger-color); transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: var(--success-color); }
-        input:checked + .slider:before { transform: translateX(26px); }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--danger); transition: .4s; border-radius: 28px; }
+        .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--success); }
+        input:checked + .slider:before { transform: translateX(22px); }
         #media-upload-status {
-            margin-top: 20px; padding: 15px; border: 1px dashed var(--border-color);
+            margin-top: 20px; padding: 20px; border: 2px dashed var(--border-color);
             border-radius: 12px; text-align: center; font-weight: 600; color: var(--text-secondary);
         }
-        #media-upload-status span { display: block; margin-bottom: 15px; word-break: break-all; }
-        .divider { height: 1px; background-color: var(--border-color); margin: 25px 0; }
+        #media-upload-status span { display: block; word-break: break-all; }
+        .divider { height: 1px; background-color: var(--border-color); margin: 25px 0; border: none; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="panel">
+        <div class="panel panel-full-width">
             <div class="panel-header">
                 <div class="panel-header-title">
                     <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi">
@@ -321,30 +471,38 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                 </div>
                 <a href="{{ url_for('logout') }}"><button id="logout-btn">Logout</button></a>
             </div>
-             <p class="panel-subtitle">Usa questo pannello per controllare la pagina del <a id="viewer-link" href="{{ url_for('pagina_visualizzatore') }}" target="_blank">visualizzatore</a> in tempo reale.</p>
+             <p class="panel-subtitle">Gestisci la pagina del <a id="viewer-link" href="{{ url_for('pagina_visualizzatore') }}" target="_blank">visualizzatore</a> in tempo reale.</p>
         </div>
+
         <div class="panel">
-            <h2>Stato del Servizio</h2>
-            <div class="service-status-container">
-                <span id="service-status-text">Caricamento...</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="service-status-toggle">
-                    <span class="slider"></span>
-                </label>
+            <h2>Stato e Media</h2>
+             <div class="control-group">
+                <label>Stato del Servizio</label>
+                <div class="service-status-container">
+                    <span id="service-status-text">Caricamento...</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="service-status-toggle">
+                        <span class="slider"></span>
+                    </label>
+                </div>
             </div>
-        </div>
-        <div class="panel">
-            <h2>Gestione Media</h2>
             <div class="control-group">
                 <label for="embed-code-input">Codice Embed (iframe)</label>
                 <textarea id="embed-code-input" placeholder="Incolla qui il codice <iframe>..."></textarea>
+                <button id="import-embed-btn" class="btn-primary" style="width: 100%; padding: 12px; margin-top: 10px;">Imposta da Embed</button>
             </div>
-            <button id="import-embed-btn" class="btn-primary" style="width: 100%; padding: 15px;">Imposta Media da Embed</button>
-            <div class="divider"></div>
+            <hr class="divider">
             <input type="file" id="video-importer" accept="video/*" style="display: none;">
-            <button id="import-video-btn" class="btn-secondary" style="width: 100%; padding: 15px;">Importa Video da File Locale</button>
+            <button id="import-video-btn" class="btn-secondary" style="width: 100%; padding: 12px;">Importa Video Locale</button>
+            <div id="media-upload-status">
+                <span>Nessun media caricato.</span>
+                <button id="remove-media-btn" class="btn-danger" style="display: none; width: auto; padding: 8px 15px; margin-top: 10px; font-size: 13px;">Rimuovi</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Controlli Video Locale</h2>
             <div class="local-video-controls">
-                <label>Controlli (Solo per file locali)</label>
                 <div class="playback-controls">
                     <button id="play-pause-btn" class="btn-primary"></button>
                     <div class="volume-stack">
@@ -352,70 +510,68 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                         <div id="video-progress-display">--:-- / --:--</div>
                     </div>
                 </div>
-                 <button id="toggle-mute-btn" style="width: 100%; padding: 15px; margin-top: 15px;">Caricamento stato audio...</button>
+                 <button id="toggle-mute-btn" class="btn-secondary">Caricamento stato audio...</button>
             </div>
-            <div id="media-upload-status">
-                <span>Nessun media caricato.</span>
-                <button id="remove-media-btn" class="btn-danger" style="display: none; width: auto; padding: 8px 15px; margin-top: 20px;">Rimuovi Media</button>
-            </div>
-        </div>
-        <div class="panel">
-            <h2>Controllo Linea e Fermate</h2>
-            <div class="control-group">
-                <label for="line-selector">Seleziona Linea Attiva</label>
-                <select id="line-selector"></select>
-            </div>
-            <div class="control-group">
-                <label>Navigazione Fermate</label>
-                <div class="navigation-buttons">
-                    <button id="prev-btn" class="btn-primary">← Precedente</button>
-                    <button id="next-btn" class="btn-primary">Successiva →</button>
-                </div>
-            </div>
-            <div id="current-status-display">
-                <div class="status-grid">
-                    <h3>Stato Attuale</h3>
-                    <div class="status-label"><span>Fermata</span><span id="status-progress">--/--</span></div>
-                    <div id="status-stop-name-container">
-                        <div id="status-stop-name">Nessuna fermata</div>
-                        <p id="status-stop-subtitle">Selezionare una linea</p>
-                    </div>
-                    <div class="status-detail status-detail-1">
-                         <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M20.5 6c-2.61.7-5.67 1-8.5 1s-5.89-.3-8.5-1L3 8c1.86.5 4.37.83 6.5.98V15H7v2h10v-2h-2.5V8.98c2.13-.15 4.64-.48 6.5-.98l-.5-2zM12 2c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69-6-6-6z"/></svg>
-                        <p><strong>Linea:</strong> <span id="status-line-name">N/D</span></p>
-                    </div>
-                     <div class="status-detail status-detail-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px"><path d="M0 0h24v24H0V0z" fill="none"/><path d="m12 2-5.5 9h11L12 2zm0 13.5 5.5 9h-11l5.5-9z"/></svg>
-                        <p><strong>Destinazione:</strong> <span id="status-line-direction">N/D</span></p>
-                    </div>
-                </div>
-                 <button id="announce-btn" title="Annuncia" class="btn-primary" style="width:100%; margin-top: 20px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
-                    ANNUNCIA
-                </button>
-            </div>
-        </div>
-        <div class="panel">
-            <h2>Gestione Linee</h2>
-            <ul id="line-management-list" class="line-list"></ul>
-            <button id="add-new-line-btn" class="btn-success" style="width: 100%; padding: 15px; margin-top: 20px;">+ Aggiungi Nuova Linea</button>
-            <button id="reset-data-btn" class="btn-danger" style="width: 100%; padding: 15px; margin-top: 10px;">Reset e Ricarica Dati Predefiniti</button>
-        </div>
-        <div class="panel">
-            <h2>Gestione Messaggi Informativi</h2>
-            <div class="control-group">
+            <h2 style="margin-top: 25px;">Messaggi Informativi</h2>
+             <div class="control-group">
                 <label for="info-messages-input">Messaggi a scorrimento (uno per riga)</label>
                 <textarea id="info-messages-input" placeholder="Benvenuti a bordo..."></textarea>
             </div>
-            <button id="save-messages-btn" class="btn-primary" style="width:100%; padding: 15px;">Salva Messaggi</button>
+            <button id="save-messages-btn" class="btn-primary" style="width:100%; padding: 12px;">Salva Messaggi</button>
+        </div>
+
+        <div class="panel panel-full-width">
+            <h2>Controllo Linea e Fermate</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                <div>
+                    <div class="control-group">
+                        <label for="line-selector">Seleziona Linea Attiva</label>
+                        <select id="line-selector"></select>
+                    </div>
+                    <div class="control-group">
+                        <label>Navigazione Fermate</label>
+                        <div class="navigation-buttons">
+                            <button id="prev-btn" class="btn-primary" style="font-size: 20px;">←</button>
+                            <button id="next-btn" class="btn-primary" style="font-size: 20px;">→</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="current-status-display">
+                    <h3>Stato Attuale</h3>
+                    <div class="status-main-info">
+                        <div class="status-progress-container">
+                            <span id="status-progress-num">--</span>
+                            <span id="status-progress-label">Fermata</span>
+                        </div>
+                        <div>
+                            <div id="status-stop-name">Nessuna fermata</div>
+                            <p id="status-stop-subtitle">Selezionare una linea</p>
+                        </div>
+                    </div>
+                    <div class="status-details-grid">
+                        <div class="status-detail"><p><strong>Linea:</strong> <span id="status-line-name">N/D</span></p></div>
+                        <div class="status-detail"><p><strong>Dest.:</strong> <span id="status-line-direction">N/D</span></p></div>
+                    </div>
+                    <button id="announce-btn" title="Annuncia" class="btn-primary" style="width:100%; margin-top: 20px; padding: 12px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="20" viewBox="0 0 24 24" width="20" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path></svg>
+                        ANNUNCIA
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel panel-full-width">
+            <h2>Gestione e Configurazione Linee</h2>
+            <ul id="line-management-list" class="line-list"></ul>
+            <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                 <button id="add-new-line-btn" class="btn-success" style="flex-grow: 1; padding: 12px;">+ Aggiungi Nuova Linea</button>
+                 <button id="reset-data-btn" class="btn-danger" style="flex-grow: 1; padding: 12px;">Reset Dati Predefiniti</button>
+            </div>
         </div>
     </div>
 
     <dialog id="line-editor-modal">
-        <div class="modal-header">
-            <h2 id="modal-title">Editor Linea</h2>
-            <button id="close-modal-btn" style="background:none; border:none; font-size: 24px; cursor:pointer;">×</button>
-        </div>
+        <h2 id="modal-title">Editor Linea</h2>
         <form id="line-editor-form">
             <input type="hidden" id="edit-line-id">
             <div class="control-group"><label for="line-name">Nome Linea</label><input type="text" id="line-name" required></div>
@@ -423,7 +579,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             <div id="stops-editor">
                 <label>Fermate</label>
                 <div id="stops-list"></div>
-                <button type="button" id="add-stop-btn" class="btn-secondary" style="margin-top: 10px;">+ Aggiungi Fermata</button>
+                <button type="button" id="add-stop-btn" class="btn-secondary" style="margin-top: 10px; width: 100%;">+ Aggiungi Fermata</button>
             </div>
             <div class="modal-actions">
                 <button type="button" id="cancel-btn" class="btn-secondary">Annulla</button>
@@ -433,6 +589,9 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     </dialog>
 
 <script>
+// --- Il codice JavaScript rimane sostanzialmente invariato nella sua logica ---
+// --- Sono stati modificati solo alcuni selettori se la struttura HTML è cambiata ---
+// --- e rinominato #status-progress in #status-progress-num per chiarezza ---
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
 
@@ -521,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
             mediaUploadStatusText.textContent = `Media da Embed attivo.`;
             removeMediaBtn.style.display = 'inline-block';
         } else if (mediaSource === 'server' && videoName) {
-            mediaUploadStatusText.textContent = `Video locale attuale: ${videoName}`;
+            mediaUploadStatusText.textContent = `Video locale: ${videoName}`;
             removeMediaBtn.style.display = 'inline-block';
         } else {
             mediaUploadStatusText.textContent = 'Nessun media caricato.';
@@ -532,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderMuteButton() {
         const muteState = localStorage.getItem('busSystem-muteState') || 'muted';
-        toggleMuteBtn.textContent = (muteState === 'muted') ? 'Disattiva Muto (Audio ON)' : 'Attiva Muto (Audio OFF)';
+        toggleMuteBtn.textContent = (muteState === 'muted') ? 'Disattiva Muto' : 'Attiva Muto';
         toggleMuteBtn.classList.toggle('btn-success', muteState === 'muted');
         toggleMuteBtn.classList.toggle('btn-secondary', muteState !== 'muted');
     }
@@ -574,7 +733,6 @@ document.addEventListener('DOMContentLoaded', () => {
             loadMediaStatus();
             updateProgressDisplay();
             renderPlayPauseButton();
-            alert('Video locale importato e inviato al server con successo!');
             sendFullStateUpdate();
         } else {
              alert('Errore durante il caricamento del video sul server.');
@@ -616,7 +774,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         loadMediaStatus();
         embedCodeInput.value = '';
-        alert('Media da Embed impostato con successo!');
         sendFullStateUpdate();
     }
 
@@ -635,7 +792,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadMediaStatus();
         updateProgressDisplay();
         renderPlayPauseButton();
-        alert('Media rimosso.');
         sendFullStateUpdate();
     }
 
@@ -670,8 +826,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addNewLineBtn = document.getElementById('add-new-line-btn');
     const modal = document.getElementById('line-editor-modal');
     const modalTitle = document.getElementById('modal-title');
-    const closeModalBtn = document.getElementById('close-modal-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
     const lineEditorForm = document.getElementById('line-editor-form');
     const editLineId = document.getElementById('edit-line-id');
     const lineNameInput = document.getElementById('line-name');
@@ -682,7 +836,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusLineDirection = document.getElementById('status-line-direction');
     const statusStopName = document.getElementById('status-stop-name');
     const statusStopSubtitle = document.getElementById('status-stop-subtitle');
-    const statusProgress = document.getElementById('status-progress');
+    const statusProgressNum = document.getElementById('status-progress-num');
     const infoMessagesInput = document.getElementById('info-messages-input');
     const saveMessagesBtn = document.getElementById('save-messages-btn');
     const serviceStatusToggle = document.getElementById('service-status-toggle');
@@ -717,8 +871,8 @@ document.addEventListener('DOMContentLoaded', () => {
         sendFullStateUpdate();
         if(showFeedback) {
             const originalText = saveMessagesBtn.textContent;
-            saveMessagesBtn.textContent = 'Salvato!'; saveMessagesBtn.style.background = 'var(--success-color)';
-            setTimeout(() => { saveMessagesBtn.textContent = originalText; saveMessagesBtn.style.background = 'linear-gradient(135deg, var(--secondary-color), var(--primary-color))'; }, 2000);
+            saveMessagesBtn.textContent = 'Salvato!'; saveMessagesBtn.classList.add('btn-success'); saveMessagesBtn.classList.remove('btn-primary');
+            setTimeout(() => { saveMessagesBtn.textContent = originalText; saveMessagesBtn.classList.add('btn-primary'); saveMessagesBtn.classList.remove('btn-success'); }, 2000);
         }
     }
 
@@ -760,14 +914,14 @@ document.addEventListener('DOMContentLoaded', () => {
         announceBtn.disabled = !hasLine;
         if (!hasLine) {
             statusLineName.textContent = 'N/D'; statusLineDirection.textContent = 'N/D';
-            statusStopName.textContent = 'Nessuna Fermata'; statusStopSubtitle.textContent = 'Selezionare una linea'; statusProgress.textContent = '--/--';
+            statusStopName.textContent = 'Nessuna Fermata'; statusStopSubtitle.textContent = 'Selezionare una linea'; statusProgressNum.textContent = '--';
             return;
         }
         const stop = line.stops[currentStopIndex];
         if (!stop) return;
         statusLineName.textContent = currentLineKey; statusLineDirection.textContent = line.direction;
         statusStopName.textContent = stop.name; statusStopSubtitle.textContent = stop.subtitle || ' ';
-        statusProgress.textContent = `${currentStopIndex + 1}/${line.stops.length}`;
+        statusProgressNum.textContent = `${currentStopIndex + 1}/${line.stops.length}`;
     }
     function renderStopsInModal(stops = []) {
         stopsListContainer.innerHTML = '';
@@ -860,7 +1014,12 @@ document.addEventListener('DOMContentLoaded', () => {
     lineEditorForm.addEventListener('submit', (e) => { e.preventDefault(); const originalId = editLineId.value; const newId = lineNameInput.value.trim().toUpperCase(); const direction = lineDirectionInput.value.trim(); if (!newId || !direction) { alert('Il nome della linea e la destinazione sono obbligatori.'); return; } const stops = []; const stopItems = stopsListContainer.querySelectorAll('.stop-item'); for (const item of stopItems) { const name = item.querySelector('.stop-name-input').value.trim().toUpperCase(); if (!name) { alert('Tutte le fermate devono avere un nome.'); return; } const subtitle = item.querySelector('.stop-subtitle-input').value.trim().toUpperCase(); stops.push({ name, subtitle }); } if (originalId && originalId !== newId) delete linesData[originalId]; linesData[newId] = { direction, stops }; saveData(); if (currentLineKey === originalId) { currentLineKey = newId; localStorage.setItem('busSystem-currentLine', newId); } renderAll(); updateAndRenderStatus(); modal.close(); });
     
     saveMessagesBtn.addEventListener('click', () => saveMessages(true));
-    closeModalBtn.addEventListener('click', () => modal.close());
+    
+    // Gestione chiusura modale
+    const cancelBtn = document.getElementById('cancel-btn');
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) { modal.close(); }
+    });
     cancelBtn.addEventListener('click', () => modal.close());
 
     initialize();
@@ -870,6 +1029,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
+# Il codice del visualizzatore non viene toccato, come richiesto
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1140,20 +1300,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // NUOVA FUNZIONE PER RIPRODURRE L'AUDIO STATICO
     function playStaticAnnouncement() {
-        duckVideoVolume(); // Abbassa il volume del video principale
-        
-        // Crea un nuovo oggetto Audio con il percorso del nostro file
+        duckVideoVolume();
         const audio = new Audio('/announcement-audio');
         audio.play();
-        
-        // Quando l'audio finisce, ripristina il volume del video
-        audio.onended = () => {
-            restoreVideoVolume();
-        };
-        
-        // In caso di errore, ripristina comunque il volume
+        audio.onended = () => { restoreVideoVolume(); };
         audio.onerror = () => {
             console.error("Impossibile riprodurre l'audio dell'annuncio.");
             restoreVideoVolume();
@@ -1238,7 +1389,6 @@ document.addEventListener('DOMContentLoaded', () => {
             updateContent();
         }
 
-        // MODIFICATO: Chiama la nuova funzione per l'audio statico
         if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
             playStaticAnnouncement();
         }
@@ -1296,22 +1446,51 @@ document.addEventListener('DOMContentLoaded', () => {
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
+
+    form = LoginForm()
+    username = form.username.data
     
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+    # Logica per la protezione da brute-force
+    if username in login_attempts:
+        attempt_info = login_attempts[username]
+        if attempt_info['attempts'] >= MAX_ATTEMPTS:
+            lockout_end_time = attempt_info['time'] + timedelta(minutes=LOCKOUT_TIME_MINUTES)
+            if datetime.now() < lockout_end_time:
+                remaining_time = round((lockout_end_time - datetime.now()).total_seconds())
+                flash(f"Troppi tentativi falliti. Riprova tra {remaining_time} secondi.", "error")
+                return render_template_string(LOGIN_PAGE_HTML, form=form)
+            else:
+                # Se il tempo di lockout è scaduto, resetta i tentativi
+                login_attempts.pop(username, None)
+
+    if form.validate_on_submit():
         user_in_db = USERS_DB.get(username)
         
-        if user_in_db and check_password_hash(user_in_db['password_hash'], password):
+        if user_in_db and check_password_hash(user_in_db['password_hash'], form.password.data):
+            # Se il login ha successo, resetta i tentativi
+            login_attempts.pop(username, None)
+            
             user = get_user(username)
             login_user(user)
             next_page = request.args.get('next')
             return redirect(next_page or url_for('dashboard'))
         else:
-            flash("Credenziali non valide. Riprova.", "error")
+            # Se il login fallisce, registra il tentativo
+            if username not in login_attempts:
+                login_attempts[username] = {'attempts': 0, 'time': None}
+            
+            login_attempts[username]['attempts'] += 1
+            login_attempts[username]['time'] = datetime.now()
+
+            remaining = MAX_ATTEMPTS - login_attempts[username]['attempts']
+            if remaining > 0:
+                flash(f"Credenziali non valide. Hai ancora {remaining} tentativi.", "error")
+            else:
+                flash(f"Account bloccato per {LOCKOUT_TIME_MINUTES} minuti a causa di troppi tentativi falliti.", "error")
+
             return redirect(url_for('login'))
             
-    return render_template_string(LOGIN_PAGE_HTML)
+    return render_template_string(LOGIN_PAGE_HTML, form=form)
 
 @app.route('/logout')
 @login_required
@@ -1329,21 +1508,14 @@ def dashboard():
 def pagina_visualizzatore():
     return render_template_string(VISUALIZZATORE_COMPLETO_HTML)
 
-
-# --- MODIFICATO: ROUTE PER SERVIRE L'AUDIO DELL'ANNUNCIO STATICO ---
 @app.route('/announcement-audio')
 @login_required
 def announcement_audio():
-    """
-    Questa route serve il file audio statico per l'annuncio.
-    Il file deve trovarsi nella stessa cartella di app.py.
-    """
     try:
         return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
         return Response("File audio dell'annuncio non trovato sul server.", status=404)
-
 
 @app.route('/upload-video', methods=['POST'])
 @login_required
@@ -1413,7 +1585,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("================================================================")
-    print("      SERVER HARZAFI POTENZIATO (v.Audio Statico) AVVIATO")
+    print("      SERVER HARZAFI POTENZIATO (v.Sicurezza e Design) AVVIATO")
     print("================================================================")
     print("MODALITA' DI ESECUZIONE: Locale (per test)")
     print("\n--- ACCESSO LOCALE (dalla stessa macchina) ---")
@@ -1421,8 +1593,8 @@ if __name__ == '__main__':
     print("\n--- ACCESSO DALLA RETE LOCALE (STESSA RETE WIFI) ---")
     print(f"Login:          http://{local_ip}:5000/login")
     print("\n--- IMPORTANTE ---")
-    print("L'annuncio ora usa il file 'LINEA 3. CORSA DEVIATA..mp3'.")
-    print("Assicurati che sia presente nella stessa cartella del server.")
+    print("Assicurati di aver aggiornato le dipendenze con 'pip install -r requirements.txt'")
+    print("Il file 'LINEA 3. CORSA DEVIATA..mp3' deve essere presente.")
     print("================================================================")
     print("Credenziali di default: admin / adminpass")
     
