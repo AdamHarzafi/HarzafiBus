@@ -6,6 +6,7 @@ from flask import Flask, Response, request, abort, jsonify, render_template_stri
 from flask_socketio import SocketIO
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+# IMPORTANTE: Assicurati di aver installato Flask-WTF con "pip install Flask-WTF"
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField
 from wtforms.validators import DataRequired
@@ -16,7 +17,6 @@ from wtforms.validators import DataRequired
 
 SECRET_KEY_FLASK = "questa-chiave-e-stata-cambiata-ed-e-molto-piu-sicura-del-2025"
 
-# Dizionario in-memory per tracciare i tentativi di login falliti (protezione da brute-force)
 login_attempts = {}
 MAX_ATTEMPTS = 5
 LOCKOUT_TIME_MINUTES = 10
@@ -92,6 +92,7 @@ current_video_file = {'data': None, 'mimetype': None, 'name': None}
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
 # -------------------------------------------------------------------
 
+# --- PAGINA DI LOGIN (FUNZIONANTE) ---
 LOGIN_PAGE_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -104,149 +105,56 @@ LOGIN_PAGE_HTML = """
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --background-start: #111827;
-            --background-end: #1F2937;
-            --card-background: rgba(31, 41, 55, 0.8);
-            --border-color: rgba(107, 114, 128, 0.2);
-            --accent-color-start: #8A2387;
-            --accent-color-end: #A244A7;
-            --text-primary: #F9FAFB;
-            --text-secondary: #9CA3AF;
-            --danger-color: #EF4444;
+            --background-start: #111827; --background-end: #1F2937;
+            --card-background: rgba(31, 41, 55, 0.8); --border-color: rgba(107, 114, 128, 0.2);
+            --accent-color-start: #8A2387; --accent-color-end: #A244A7;
+            --text-primary: #F9FAFB; --text-secondary: #9CA3AF; --danger-color: #EF4444;
         }
         * { box-sizing: border-box; }
         body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, var(--background-start), var(--background-end));
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            font-family: 'Inter', sans-serif; background: linear-gradient(135deg, var(--background-start), var(--background-end));
+            color: var(--text-primary); display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; margin: 0; padding: 20px;
         }
         .login-container {
-            width: 100%;
-            max-width: 420px;
-            background: var(--card-background);
-            border: 1px solid var(--border-color);
-            padding: 40px;
-            border-radius: 24px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(10px);
-            text-align: center;
-            animation: fadeIn 0.5s ease-out;
+            width: 100%; max-width: 420px; background: var(--card-background);
+            border: 1px solid var(--border-color); padding: 40px; border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4); backdrop-filter: blur(10px);
+            text-align: center; animation: fadeIn 0.5s ease-out;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .logo {
-            max-width: 150px;
-            margin-bottom: 24px;
-            filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.1));
-        }
-        h2 {
-            color: var(--text-primary);
-            font-weight: 700;
-            font-size: 24px;
-            margin: 0 0 32px 0;
-        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .logo { max-width: 150px; margin-bottom: 24px; filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.1)); }
+        h2 { color: var(--text-primary); font-weight: 700; font-size: 24px; margin: 0 0 32px 0; }
         .flash-message {
-            padding: 12px 15px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            border: 1px solid;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn .3s ease-out;
+            padding: 12px 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid; font-weight: 600;
+            display: flex; align-items: center; gap: 10px; animation: slideIn .3s ease-out;
         }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         .flash-message.error {
-            background-color: rgba(239, 68, 68, 0.1);
-            color: var(--danger-color);
-            border-color: rgba(239, 68, 68, 0.3);
+            background-color: rgba(239, 68, 68, 0.1); color: var(--danger-color); border-color: rgba(239, 68, 68, 0.3);
         }
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-            position: relative;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            font-size: 14px;
-        }
+        .form-group { margin-bottom: 20px; text-align: left; position: relative; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-secondary); font-size: 14px; }
         input {
-            width: 100%;
-            padding: 14px 16px;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            background-color: #111827;
-            color: var(--text-primary);
-            font-size: 16px;
-            font-family: 'Inter', sans-serif;
+            width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border-color);
+            background-color: #111827; color: var(--text-primary); font-size: 16px; font-family: 'Inter', sans-serif;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-        input:focus {
-            outline: none;
-            border-color: var(--accent-color-end);
-            box-shadow: 0 0 0 4px rgba(162, 68, 167, 0.2);
-        }
-        input:-webkit-autofill {
-             -webkit-box-shadow: 0 0 0 30px #111827 inset !important;
-             -webkit-text-fill-color: var(--text-primary) !important;
-        }
-        .password-wrapper {
-            position: relative;
-        }
+        input:focus { outline: none; border-color: var(--accent-color-end); box-shadow: 0 0 0 4px rgba(162, 68, 167, 0.2); }
+        input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111827 inset !important; -webkit-text-fill-color: var(--text-primary) !important;}
+        .password-wrapper { position: relative; }
         #password-toggle {
-            position: absolute;
-            top: 50%;
-            right: 14px;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 5px;
-            color: var(--text-secondary);
+            position: absolute; top: 50%; right: 14px; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; padding: 5px; color: var(--text-secondary);
         }
-        #password-toggle svg {
-            width: 20px;
-            height: 20px;
-        }
+        #password-toggle svg { width: 20px; height: 20px; }
         button[type="submit"] {
-            width: 100%;
-            padding: 15px;
-            border: none;
-            background: linear-gradient(135deg, var(--accent-color-end), var(--accent-color-start));
-            color: white;
-            font-size: 16px;
-            font-weight: 700;
-            border-radius: 12px;
-            cursor: pointer;
+            width: 100%; padding: 15px; border: none; background: linear-gradient(135deg, var(--accent-color-end), var(--accent-color-start));
+            color: white; font-size: 16px; font-weight: 700; border-radius: 12px; cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
         }
-        button[type="submit"]:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 20px rgba(138, 35, 135, 0.25);
-        }
-        button[type="submit"]:disabled {
-            background: #4B5563;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
+        button[type="submit"]:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(138, 35, 135, 0.25); }
+        button[type="submit"]:disabled { background: #4B5563; cursor: not-allowed; transform: none; box-shadow: none; }
     </style>
 </head>
 <body>
@@ -288,18 +196,12 @@ LOGIN_PAGE_HTML = """
         const toggleButton = document.getElementById('password-toggle');
         const eyeOpen = document.getElementById('eye-open');
         const eyeClosed = document.getElementById('eye-closed');
-
         if (toggleButton) {
             toggleButton.addEventListener('click', () => {
-                if (passwordInput.type === 'password') {
-                    passwordInput.type = 'text';
-                    eyeOpen.style.display = 'none';
-                    eyeClosed.style.display = 'block';
-                } else {
-                    passwordInput.type = 'password';
-                    eyeOpen.style.display = 'block';
-                    eyeClosed.style.display = 'none';
-                }
+                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passwordInput.setAttribute('type', type);
+                eyeOpen.style.display = type === 'password' ? 'block' : 'none';
+                eyeClosed.style.display = type === 'password' ? 'none' : 'block';
             });
         }
     });
@@ -308,9 +210,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-#
-# --- NUOVO DESIGN "APPLE-STYLE": PANNELLO_CONTROLLO_COMPLETO_HTML ---
-#
+# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (CON PULSANTE VISUALIZZATORE) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -324,71 +224,47 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         :root {
-            --background: #000000;
-            --content-background: #1D1D1F;
-            --content-background-light: #2C2C2E;
-            --border-color: #3A3A3C;
-            --text-primary: #F5F5F7;
-            --text-secondary: #86868B;
-            --accent-primary: #A244A7;
-            --accent-secondary: #8A2387;
-            --success: #30D158;
-            --danger: #FF453A;
-            --blue: #0A84FF;
+            --background: #000000; --content-background: #1D1D1F; --content-background-light: #2C2C2E;
+            --border-color: #3A3A3C; --text-primary: #F5F5F7; --text-secondary: #86868B;
+            --accent-primary: #A244A7; --accent-secondary: #8A2387; --success: #30D158;
+            --danger: #FF453A; --blue: #0A84FF;
         }
         * { box-sizing: border-box; }
         ::selection { background-color: var(--accent-primary); color: var(--text-primary); }
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--background);
-            color: var(--text-primary);
-            margin: 0;
-            padding: 20px;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            overflow-y: scroll;
+            font-family: 'Inter', sans-serif; background: var(--background); color: var(--text-primary);
+            margin: 0; padding: 20px; overflow-y: scroll;
         }
-        .main-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 40px;
-        }
+        .main-container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
         .main-header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 20px 0; border-bottom: 1px solid var(--border-color);
+            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+            gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--border-color);
         }
         .header-title { display: flex; align-items: center; gap: 15px; }
         .header-title img { max-width: 100px; }
         .header-title h1 { font-size: 28px; font-weight: 700; margin: 0; }
-        #logout-btn {
-            background: var(--content-background); color: var(--danger); border: 1px solid var(--border-color);
+        .header-actions { display: flex; align-items: center; gap: 15px; }
+        .btn {
             padding: 8px 16px; border-radius: 99px; font-weight: 600; cursor: pointer;
+            text-decoration: none; display: inline-block;
             transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
         }
-        #logout-btn:hover { background: var(--danger); color: var(--white); border-color: var(--danger); }
+        .btn-viewer { background: var(--blue); color: white; border: 1px solid var(--blue); }
+        .btn-viewer:hover { filter: brightness(1.1); }
+        #logout-btn { background: var(--content-background); color: var(--danger); border: 1px solid var(--border-color); }
+        #logout-btn:hover { background: var(--danger); color: white; border-color: var(--danger); }
         .control-section {
-            background: var(--content-background);
-            padding: 30px; border-radius: 20px;
-            animation: fadeIn 0.5s ease-out forwards;
-            opacity: 0;
+            background: var(--content-background); padding: 30px; border-radius: 20px;
+            animation: fadeIn 0.5s ease-out forwards; opacity: 0;
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-        .control-section h2 {
-            font-size: 22px; font-weight: 600; margin: 0 0 10px 0;
-            color: var(--text-primary); letter-spacing: -0.5px;
-        }
-        .control-section .subtitle {
-            font-size: 16px; color: var(--text-secondary);
-            margin: -5px 0 25px 0; max-width: 600px;
-        }
+        .control-section h2 { font-size: 22px; font-weight: 600; margin: 0 0 10px 0; letter-spacing: -0.5px; }
+        .control-section .subtitle { font-size: 16px; color: var(--text-secondary); margin: -5px 0 25px 0; max-width: 600px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; }
         .control-group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 10px; font-weight: 500; color: var(--text-secondary); font-size: 14px; }
         select, button, input[type="text"], textarea {
-            width: 100%; padding: 12px 14px; border-radius: 12px;
-            border: 1px solid var(--border-color);
+            width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-color);
             font-size: 15px; box-sizing: border-box; font-family: 'Inter', sans-serif;
             background-color: var(--content-background-light); color: var(--text-primary);
             transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -403,7 +279,10 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         .btn-success { background: var(--success); color: var(--white); }
         .btn-danger { background: var(--danger); color: var(--white); }
         .btn-secondary { background: var(--content-background-light); color: var(--text-primary); border: 1px solid var(--border-color); }
-        #status-card { background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary)); padding: 25px; border-radius: 16px; color: var(--white); }
+        #status-card {
+            background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary)); padding: 25px;
+            border-radius: 16px; color: var(--white);
+        }
         #status-card h3 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; }
         #status-stop-name { font-size: 32px; font-weight: 700; margin: 0; line-height: 1.1; letter-spacing: -1px; }
         #status-stop-subtitle { font-size: 16px; opacity: 0.9; margin: 4px 0 0 0; }
@@ -416,15 +295,26 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         .line-item:hover { background-color: var(--content-background-light); }
         .line-actions { display: flex; gap: 10px; }
         .line-actions button { width: auto; padding: 6px 12px; font-size: 13px; }
-        dialog { width: 95%; max-width: 500px; border-radius: 20px; border: 1px solid var(--border-color); background: var(--background); color: var(--text-primary); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); padding: 30px; animation: dialog-in 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        dialog {
+            width: 95%; max-width: 500px; border-radius: 20px; border: 1px solid var(--border-color);
+            background: var(--background); color: var(--text-primary);
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); padding: 30px;
+            animation: dialog-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
         dialog::backdrop { background-color: rgba(0,0,0,0.7); backdrop-filter: blur(8px); animation: backdrop-in 0.3s ease; }
         @keyframes dialog-in { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
         @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
         .toggle-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--content-background-light); transition: .4s; border-radius: 28px; }
-        .slider:before { position: absolute; content: ""; height: 22px; width: 22px; left: 3px; bottom: 3px; background-color: white; transition: .4s cubic-bezier(0.16, 1, 0.3, 1); border-radius: 50%; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--content-background-light); transition: .4s; border-radius: 28px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 22px; width: 22px; left: 3px; bottom: 3px;
+            background-color: white; transition: .4s cubic-bezier(0.16, 1, 0.3, 1); border-radius: 50%;
+        }
         input:checked + .slider { background-color: var(--success); }
         input:checked + .slider:before { transform: translateX(22px); }
     </style>
@@ -436,7 +326,10 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                 <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi">
                 <h1>Pannello</h1>
             </div>
-            <a href="{{ url_for('logout') }}"><button id="logout-btn">Logout</button></a>
+            <div class="header-actions">
+                <a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-viewer">Apri Visualizzatore</a>
+                <a href="{{ url_for('logout') }}"><button id="logout-btn" class="btn">Logout</button></a>
+            </div>
         </header>
 
         <section class="control-section">
@@ -778,7 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoImporter.addEventListener('change', handleLocalVideoUpload);
     importEmbedBtn.addEventListener('click', handleEmbedImport);
     removeMediaBtn.addEventListener('click', removeMedia);
-    addNewLineBtn.addEventListener('click', () => { document.getElementById('edit-line-id').value = ''; document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; lineEditorForm.reset(); stopsListContainer.innerHTML = ''; modal.showModal(); });
+    addNewLineBtn.addEventListener('click', () => { document.getElementById('edit-line-id').value = ''; document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; lineEditorForm.reset(); stopsListContainer.innerHTML = ''; addStopToModal(); modal.showModal(); });
     lineManagementList.addEventListener('click', (e) => {
         const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
         if (target.classList.contains('edit-btn')) {
@@ -818,9 +711,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-#
-# --- NUOVO DESIGN "APPLE-STYLE": VISUALIZZATORE_COMPLETO_HTML ---
-#
+# --- VISUALIZZATORE (DESIGN ORIGINALE RIPRISTINATO + AUDIO ISTANTANEO) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -830,148 +721,167 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <title>Visualizzazione Fermata Harzafi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         :root {
-            --background: #000;
-            --text-primary: #FFFFFF;
-            --text-secondary: #86868B;
-            --line-color: #A244A7;
-            --line-border: #3A3A3C;
-            --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+            --main-text-color: #ffffff;
+            --gradient-start: #D544A7;
+            --gradient-end: #4343A2;
+            --line-color: #8A2387;
         }
-        * { box-sizing: border-box; }
         body {
             margin: 0;
-            font-family: 'Inter', sans-serif;
-            background: var(--background);
-            color: var(--text-primary);
+            font-family: 'Montserrat', sans-serif;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            color: var(--main-text-color);
             height: 100vh;
             display: flex;
             overflow: hidden;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            font-size: 1.2em;
         }
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: var(--background); z-index: 999; transition: opacity 0.8s ease;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            z-index: 999; transition: opacity 0.8s ease;
         }
-        #loader img { width: 200px; animation: pulse-logo 2.5s infinite ease-in-out; }
-        #loader p { margin-top: 25px; font-size: 1em; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
+        #loader img { width: 250px; max-width: 70%; animation: pulse-logo 2s infinite ease-in-out; }
+        #loader p { margin-top: 25px; font-size: 1.2em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; }
         @keyframes pulse-logo {
-            0%, 100% { transform: scale(1); opacity: 0.8; }
-            50% { transform: scale(1.03); opacity: 1; }
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
         }
         #loader.hidden { opacity: 0; pointer-events: none; }
-        .main-grid {
-            width: 100%; height: 100%;
-            display: grid; grid-template-columns: 55% 45%;
-            padding: 5vh; gap: 5vh;
+        
+        .main-content-wrapper { flex: 3; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 40px; }
+        .video-wrapper { flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box; }
+        .container { display: flex; align-items: center; width: 100%; max-width: 1400px; opacity: 0; transition: opacity 0.8s ease; }
+        .container.visible { opacity: 1; }
+        .line-graphic {
+            flex-shrink: 0; width: 120px; height: 500px; display: flex;
+            flex-direction: column; align-items: center; position: relative;
+            justify-content: center; padding-bottom: 80px;
         }
-        .info-container {
-            display: flex; flex-direction: column; justify-content: space-between;
-            opacity: 0; animation: fadeIn 1s var(--ease-out-quint) forwards;
+        .line-graphic::before {
+            content: ''; position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+            width: 12px; height: 78%; background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 6px; z-index: 1;
         }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .header { display: flex; align-items: center; gap: 20px; }
-        .line-id-display {
-            width: 90px; height: 90px; flex-shrink: 0;
-            background: var(--text-primary); border-radius: 25px;
-            display: flex; align-items: center; justify-content: center;
+        .line-id-container {
+            width: 100px; height: 100px; background-color: var(--main-text-color);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            z-index: 2; box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+            border: 4px solid var(--gradient-end); position: absolute;
+            top: 15%; left: 50%; transform: translateX(-50%);
         }
-        #line-id { font-size: 48px; font-weight: 800; color: var(--line-color); }
-        .direction-info {
-            overflow: hidden; white-space: nowrap;
+        #line-id { font-size: 48px; font-weight: 900; color: var(--line-color); }
+        .current-stop-indicator {
+            width: 60px; height: 60px; background-color: var(--main-text-color);
+            border-radius: 12px; z-index: 2; position: absolute; bottom: 27%;
+            left: 50%; transform: translateX(-50%); opacity: 1;
+            box-shadow: 0 0 20px rgba(255,255,255,0.7);
         }
-        .direction-header { font-size: 24px; font-weight: 500; color: var(--text-secondary); margin: 0; }
-        #direction-name { font-size: 42px; font-weight: 700; margin: 0; letter-spacing: -1px; }
-        .stop-info { padding: 20px 0; }
-        .next-stop-header { font-size: 28px; font-weight: 500; color: var(--text-secondary); margin: 0; }
-        .stop-name-wrapper {
-            position: relative; margin-top: 10px; height: 150px; /* Altezza fissa per animazione stabile */
+        .current-stop-indicator.exit { opacity: 0; transform: translateX(-50%) translateY(50px) scale(0.5); transition: opacity 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55), transform 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+        .current-stop-indicator.enter { animation: slideInFromTopFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
+        .current-stop-indicator.enter-reverse { animation: slideInFromBottomFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
+        
+        .text-content { padding-left: 70px; width: 100%; overflow: hidden; }
+        .direction-header { font-size: 30px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #direction-name { font-size: 70px; font-weight: 900; margin: 5px 0 60px 0; text-transform: uppercase; }
+        .next-stop-header { font-size: 28px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #stop-name { font-size: 140px; font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase; white-space: normal; opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
+        #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
+        #stop-name.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
+        #stop-subtitle { font-size: 42px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
+        
+        .logo {
+            position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
+            filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
         }
-        #stop-name {
-            font-size: 130px; font-weight: 800; margin: 0; line-height: 1; letter-spacing: -5px;
-            position: absolute; top: 0; left: 0; width: 100%;
-            transition: opacity 0.6s var(--ease-out-quint), transform 0.6s var(--ease-out-quint);
-        }
-        #stop-name.exit-up { opacity: 0; transform: translateY(-50px); }
-        #stop-name.exit-down { opacity: 0; transform: translateY(50px); }
-        #stop-name.enter-up { opacity: 0; transform: translateY(50px); }
-        #stop-name.enter-down { opacity: 0; transform: translateY(-50px); }
-        #stop-subtitle {
-            font-size: 42px; font-weight: 400; color: var(--text-secondary); margin-top: 10px;
-            transition: opacity 0.6s var(--ease-out-quint), transform 0.6s var(--ease-out-quint);
-        }
-        .logo-footer { display: flex; align-items: center; gap: 15px; border-top: 1px solid var(--line-border); padding-top: 25px; }
-        .logo-footer img { width: 100px; }
-        .logo-footer p { font-size: 16px; font-weight: 500; color: var(--text-secondary); }
-        .video-container {
-            width: 100%; height: 100%;
-            opacity: 0; animation: fadeIn 1s var(--ease-out-quint) 0.2s forwards;
+        .logo.visible { opacity: 0.9; }
+
+        @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        #service-offline-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; pointer-events: none; }
+        #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
+        #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; margin: 0; text-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        @keyframes fadeInBlur { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
+        #video-player-container {
+            width: 100%; max-width: 100%; background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); opacity: 0;
+            overflow: hidden; display: flex; align-items: center; justify-content: center;
+            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
             position: relative;
         }
-        #video-player-container {
-            width: 100%; height: 100%; background-color: #111;
-            border-radius: 25px; overflow: hidden;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-            transition: all 0.5s var(--ease-out-quint);
+        #ad-video {
+            width: 100%; height: 100%; object-fit: cover; border-radius: 25px; display: block;
+            position: absolute; top: 0; left: 0;
+            transition: volume 0.4s ease-in-out;
         }
-        #ad-video, #video-player-container iframe { width: 100%; height: 100%; object-fit: cover; border: 0; }
+        
+        #video-player-container iframe {
+            border-radius: 25px;
+        }
+        .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         .placeholder-content {
-            width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-            font-size: 24px; font-weight: 600; color: var(--text-secondary);
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; text-align: center; padding: 20px; box-sizing: border-box;
         }
-        #service-offline-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000;
-            display: flex; align-items: center; justify-content: center; text-align: center;
-            background-color: rgba(0,0,0,0.7); backdrop-filter: blur(15px);
-            transition: opacity 0.5s ease; opacity: 0; pointer-events: none;
-        }
-        #service-offline-overlay.visible { opacity: 1; pointer-events: auto; }
-        #service-offline-overlay h2 { font-size: 5vw; font-weight: 700; margin: 0; letter-spacing: -2px; }
+        .placeholder-content h2 { font-size: 2vw; font-weight: 900; margin: 0 0 15px 0; text-transform: uppercase; }
+        .placeholder-content p { font-size: 1.2vw; opacity: 0.8; margin: 0; }
+        
+        .box-enter-animation { animation: box-enter 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .box-exit-animation { animation: box-exit 0.6s ease-out forwards; }
+        @keyframes box-enter { from { opacity: 0; transform: translateX(50px) scale(0.98); } to { opacity: 1; transform: translateX(0) scale(1); } }
+        @keyframes box-exit { from { opacity: 1; transform: translateX(0) scale(1); } to { opacity: 0; transform: translateX(50px) scale(0.98); } }
     </style>
 </head>
 <body>
     <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
     <div id="loader">
-        <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi">
-        <p>Inizializzazione Sistema...</p>
+        <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
+        <p>CONNESSIONE AL SERVER...</p>
     </div>
-    <div class="main-grid">
-        <div class="info-container">
-            <header class="header">
-                <div class="line-id-display"><span id="line-id">--</span></div>
-                <div class="direction-info">
-                    <p class="direction-header">DESTINAZIONE</p>
-                    <h1 id="direction-name">Caricamento...</h1>
-                </div>
-            </header>
-            <main class="stop-info">
-                <p class="next-stop-header">PROSSIMA FERMATA</p>
-                <div class="stop-name-wrapper">
-                    <h2 id="stop-name">In attesa di dati...</h2>
-                </div>
+    <div class="main-content-wrapper">
+        <div class="container">
+            <div class="line-graphic">
+                <div class="line-id-container"><span id="line-id">--</span></div>
+                <div id="stop-indicator" class="current-stop-indicator"></div>
+            </div>
+            <div class="text-content">
+                <p class="direction-header">DESTINAZIONE - DESTINATION</p>
+                <h1 id="direction-name"></h1>
+                <p class="next-stop-header">PROSSIMA FERMATA - NEXT STOP</p>
+                <h2 id="stop-name"></h2>
                 <p id="stop-subtitle"></p>
-            </main>
-            <footer class="logo-footer">
-                <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi">
-                <p>Sistema informativo di bordo</p>
-            </footer>
-        </div>
-        <div class="video-container">
-            <div id="video-player-container"></div>
+            </div>
         </div>
     </div>
-    <div id="service-offline-overlay"><h2>SERVIZIO NON ATTIVO</h2></div>
+    <div class="video-wrapper">
+        <div id="video-player-container" class="aspect-ratio-16-9"></div>
+    </div>
+    
+    <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
+    <div id="service-offline-overlay">
+        <div class="overlay-content">
+            <h2>NESSUN SERVIZIO</h2>
+            <p>AL MOMENTO, IL SISTEMA NON È DISPONIBILE.</p>
+        </div>
+    </div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
-    const announcementSound = document.getElementById('announcement-sound');
+    const announcementSound = document.getElementById('announcement-sound'); // Audio precaricato
     let lastKnownState = {};
 
     function applyMediaState(state) {
@@ -990,27 +900,26 @@ document.addEventListener('DOMContentLoaded', () => {
             newContent = state.embedCode;
         } else if (state.mediaSource === 'server') {
             const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
-            newContent = `<video id="ad-video" loop playsinline autoplay></video>`;
-            setTimeout(() => { 
-                const videoEl = document.getElementById('ad-video');
-                if(videoEl) videoEl.src = videoUrl;
-            }, 10);
+            newContent = `<video id="ad-video" loop playsinline autoplay src="${videoUrl}"></video>`;
         } else {
-            newContent = `<div class="placeholder-content"></div>`;
+            newContent = `<div class="placeholder-content"><h2>NESSUN MEDIA DISPONIBILE</h2></div>`;
         }
         
         if (videoPlayerContainer.innerHTML !== newContent) {
             videoPlayerContainer.innerHTML = newContent;
         }
-
+        
         applyMediaState(state);
     }
 
     const loaderEl = document.getElementById('loader');
+    const containerEl = document.querySelector('.container');
+    const logoEl = document.querySelector('.logo');
     const lineIdEl = document.getElementById('line-id');
     const directionNameEl = document.getElementById('direction-name');
     const stopNameEl = document.getElementById('stop-name');
     const stopSubtitleEl = document.getElementById('stop-subtitle');
+    const stopIndicatorEl = document.getElementById('stop-indicator');
     const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
     function playAnnouncement() {
@@ -1018,23 +927,23 @@ document.addEventListener('DOMContentLoaded', () => {
         let originalVolume = 1.0;
         if (videoEl && !videoEl.muted) {
             originalVolume = videoEl.volume;
-            videoEl.volume = Math.min(originalVolume, 0.15);
+            videoEl.volume = Math.min(originalVolume, 0.2);
         }
+        
         announcementSound.currentTime = 0;
         announcementSound.play().catch(e => console.error("Errore riproduzione annuncio:", e));
+        
         announcementSound.onended = () => {
-            if (videoEl) videoEl.volume = originalVolume;
+            if (videoEl) { videoEl.volume = originalVolume; }
         };
     }
 
-    function adjustFontSize(element, baseSize, minSize, maxChars) {
-        const len = element.textContent.length;
-        let newSize = baseSize;
-        if (len > maxChars) {
-            newSize = Math.max(minSize, baseSize * (maxChars / len));
+    function adjustFontSize(element) {
+        const maxFontSize = 140; const minFontSize = 40;
+        element.style.fontSize = maxFontSize + 'px'; let currentFontSize = maxFontSize;
+        while ((element.scrollWidth > element.parentElement.clientWidth || element.scrollHeight > element.parentElement.clientHeight) && currentFontSize > minFontSize) {
+            currentFontSize -= 2; element.style.fontSize = currentFontSize + 'px';
         }
-        element.style.fontSize = `${newSize}px`;
-        element.style.letterSpacing = `${newSize < 100 ? -2 : -5}px`;
     }
 
     function checkServiceStatus(state) {
@@ -1042,7 +951,10 @@ document.addEventListener('DOMContentLoaded', () => {
             serviceOfflineOverlay.classList.add('visible');
             return false;
         }
-        serviceOfflineOverlay.classList.remove('visible');
+        if (serviceOfflineOverlay.classList.contains('visible')) {
+            serviceOfflineOverlay.classList.add('hiding');
+            setTimeout(() => serviceOfflineOverlay.classList.remove('visible', 'hiding'), 600);
+        }
         return true;
     }
     
@@ -1056,35 +968,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const stopIndexChanged = lastKnownState.currentStopIndex !== state.currentStopIndex;
 
         loaderEl.classList.add('hidden');
+        containerEl.classList.add('visible');
+        logoEl.classList.add('visible');
 
         const line = state.linesData[state.currentLineKey];
         if (!line) return;
         const stop = line.stops[state.currentStopIndex];
-
-        const updateTextContent = () => {
+        
+        const updateContent = () => {
             lineIdEl.textContent = state.currentLineKey;
             directionNameEl.textContent = line.direction;
             stopNameEl.textContent = stop ? stop.name : 'CAPOLINEA';
             stopSubtitleEl.textContent = stop ? (stop.subtitle || '') : '';
-            adjustFontSize(stopNameEl, 130, 70, 12);
+            adjustFontSize(stopNameEl);
         };
-        
+
         if (!isInitialLoad && (lineChanged || stopIndexChanged)) {
-            const isForward = state.currentStopIndex > lastKnownState.currentStopIndex;
-            stopNameEl.className = isForward ? 'exit-up' : 'exit-down';
-            stopSubtitleEl.style.opacity = 0;
-            
+            const direction = (!isInitialLoad && stopIndexChanged && state.currentStopIndex < lastKnownState.currentStopIndex) ? 'prev' : 'next';
+            stopIndicatorEl.className = 'current-stop-indicator exit';
+            stopNameEl.className = 'exit';
             setTimeout(() => {
-                stopNameEl.className = isForward ? 'enter-up' : 'enter-down';
-                updateTextContent();
-                
+                updateContent();
+                stopIndicatorEl.classList.remove('exit');
+                stopNameEl.classList.remove('exit');
+                const enterClass = (direction === 'prev') ? 'enter-reverse' : 'enter';
+                stopIndicatorEl.classList.add(enterClass);
+                stopNameEl.classList.add('enter');
                 setTimeout(() => {
-                    stopNameEl.className = '';
-                    stopSubtitleEl.style.opacity = 1;
-                }, 20);
-            }, 600);
+                    stopIndicatorEl.classList.remove('enter', 'enter-reverse');
+                    stopNameEl.classList.remove('enter');
+                }, 500);
+            }, 400);
         } else {
-            updateTextContent();
+            updateContent();
         }
 
         if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
@@ -1097,19 +1013,17 @@ document.addEventListener('DOMContentLoaded', () => {
             applyMediaState(state);
         }
         
-        lastKnownState = JSON.parse(JSON.stringify(state)); // Deep copy
+        lastKnownState = JSON.parse(JSON.stringify(state));
     }
     
     socket.on('connect', () => {
         loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
         socket.emit('request_initial_state');
     });
-
     socket.on('disconnect', () => {
         loaderEl.classList.remove('hidden');
         loaderEl.querySelector('p').textContent = "Connessione persa...";
     });
-
     socket.on('initial_state', updateDisplay);
     socket.on('state_updated', updateDisplay);
 });
@@ -1129,11 +1043,9 @@ def login():
 
     form = LoginForm()
 
-    # Esegui la logica solo quando l'utente invia il form
     if form.validate_on_submit():
         username = form.username.data
 
-        # --- LOGICA DI SICUREZZA CORRETTA ---
         # 1. Controlla PRIMA se l'utente è bloccato
         if username in login_attempts:
             attempt_info = login_attempts[username]
@@ -1142,17 +1054,13 @@ def login():
                 if datetime.now() < lockout_end_time:
                     remaining_time = round((lockout_end_time - datetime.now()).total_seconds())
                     flash(f"Troppi tentativi falliti. Riprova tra {remaining_time} secondi.", "error")
-                    # Ricarica la pagina CON il messaggio di errore, senza fare redirect.
-                    # Questo mantiene lo stato di blocco anche se la pagina viene ricaricata.
                     return render_template_string(LOGIN_PAGE_HTML, form=form)
                 else:
-                    # Se il tempo di blocco è scaduto, lo sblocchiamo
                     login_attempts.pop(username, None)
 
         # 2. Se non è bloccato, controlla la password
         user_in_db = USERS_DB.get(username)
         if user_in_db and check_password_hash(user_in_db['password_hash'], form.password.data):
-            # Successo: pulisci i tentativi e fai il login
             login_attempts.pop(username, None)
             user = get_user(username)
             login_user(user)
@@ -1171,10 +1079,9 @@ def login():
             else:
                 flash(f"Account bloccato per {LOCKOUT_TIME_MINUTES} minuti.", "error")
             
-            # Ricarica la pagina mostrando l'errore
             return render_template_string(LOGIN_PAGE_HTML, form=form)
     
-    # Questo viene eseguito per la richiesta GET iniziale (quando si visita la pagina)
+    # Questo viene eseguito per la richiesta GET iniziale
     return render_template_string(LOGIN_PAGE_HTML, form=form)
 
 
@@ -1259,7 +1166,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("      SERVER HARZAFI v3 (Apple Design & Sicurezza Corretta)")
+    print("      SERVER HARZAFI v4 (Visualizzatore Ripristinato)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
