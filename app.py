@@ -434,8 +434,6 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     </dialog>
 
 <script>
-// Il codice Javascript è stato mantenuto nella sua logica,
-// ma alcuni selettori sono stati aggiornati per il nuovo HTML.
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
 
@@ -584,7 +582,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadMediaStatus(); sendFullStateUpdate();
     }
 
-    function loadServiceStatus() { serviceStatus = localStorage.getItem('busSystem-serviceStatus') || 'online'; renderServiceStatus(); }
     function saveServiceStatus() { localStorage.setItem('busSystem-serviceStatus', serviceStatus); sendFullStateUpdate(); }
     function renderServiceStatus() {
         const isOnline = serviceStatus === 'online';
@@ -650,10 +647,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initialize() {
-        loadMediaStatus(); loadData(); loadMessages(); loadServiceStatus();
+        loadMediaStatus();
+        loadData();
+        loadMessages();
+        
+        // Force service to 'online' on panel start to ensure visualizer is always active on open.
+        serviceStatus = 'online';
+        saveServiceStatus();
+        renderServiceStatus();
+        
         currentLineKey = localStorage.getItem('busSystem-currentLine');
         currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex'), 10) || 0;
-        renderAll(); updateAndRenderStatus();
+        renderAll();
+        updateAndRenderStatus();
     }
     
     lineSelector.addEventListener('change', (e) => { currentLineKey = e.target.value; currentStopIndex = 0; updateAndRenderStatus(); });
@@ -814,10 +820,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
         @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
         #video-player-container {
             width: 100%; max-width: 100%; background-color: rgba(0, 0, 0, 0.2);
-            border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); opacity: 0;
+            border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
-            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
             position: relative;
+            transition: opacity 0.5s ease, transform 0.5s ease;
         }
         #ad-video {
             width: 100%; height: 100%; object-fit: cover; border-radius: 25px; display: block;
@@ -835,12 +841,19 @@ VISUALIZZATORE_COMPLETO_HTML = """
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; text-align: center; padding: 20px; box-sizing: border-box;
         }
-        .placeholder-content h2 { font-size: 1.6vw; font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        .placeholder-content h2 {
+            font-size: 1.6vw;
+            font-weight: 900;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
         
-        .box-enter-animation { animation: box-enter 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .box-exit-animation { animation: box-exit 0.6s ease-out forwards; }
-        @keyframes box-enter { from { opacity: 0; transform: translateX(50px) scale(0.98); } to { opacity: 1; transform: translateX(0) scale(1); } }
-        @keyframes box-exit { from { opacity: 1; transform: translateX(0) scale(1); } to { opacity: 0; transform: translateX(50px) scale(0.98); } }
+        .box-enter-animation { animation: box-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
     </style>
 </head>
 <body>
@@ -865,7 +878,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         </div>
     </div>
     <div class="video-wrapper">
-        <div id="video-player-container" class="aspect-ratio-16-9"></div>
+        <div id="video-player-container" class="aspect-ratio-16-9" style="opacity: 0;"></div>
     </div>
     
     <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
@@ -880,7 +893,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
-    const announcementSound = document.getElementById('announcement-sound'); // Audio precaricato
+    const announcementSound = document.getElementById('announcement-sound');
     let lastKnownState = {};
 
     function applyMediaState(state) {
@@ -904,11 +917,20 @@ document.addEventListener('DOMContentLoaded', () => {
             newContent = `<div class="placeholder-content"><h2>NESSUN VIDEO IN RIPRODUZIONE</h2></div>`;
         }
         
-        if (videoPlayerContainer.innerHTML !== newContent) {
-            videoPlayerContainer.innerHTML = newContent;
+        const currentContent = videoPlayerContainer.innerHTML;
+        if (currentContent !== newContent) {
+            videoPlayerContainer.classList.remove('box-enter-animation');
+            videoPlayerContainer.classList.add('box-exit-animation');
+            
+            setTimeout(() => {
+                videoPlayerContainer.innerHTML = newContent;
+                videoPlayerContainer.classList.remove('box-exit-animation');
+                videoPlayerContainer.classList.add('box-enter-animation');
+                applyMediaState(state);
+            }, 500);
+        } else {
+            applyMediaState(state);
         }
-        
-        applyMediaState(state);
     }
 
     const loaderEl = document.getElementById('loader');
@@ -924,16 +946,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function playAnnouncement() {
         const videoEl = document.getElementById('ad-video');
         let originalVolume = 1.0;
+        
         if (videoEl && !videoEl.muted) {
             originalVolume = videoEl.volume;
-            videoEl.volume = Math.min(originalVolume, 0.2);
+            videoEl.volume = Math.min(originalVolume, 0.2); // Abbassa il volume
         }
         
         announcementSound.currentTime = 0;
         announcementSound.play().catch(e => console.error("Errore riproduzione annuncio:", e));
         
         announcementSound.onended = () => {
-            if (videoEl) { videoEl.volume = originalVolume; }
+            if (videoEl) {
+                videoEl.volume = originalVolume; // Ripristina il volume originale
+            }
         };
     }
 
@@ -954,18 +979,16 @@ document.addEventListener('DOMContentLoaded', () => {
             serviceOfflineOverlay.classList.add('visible');
         } else if (!isOffline && isVisible) {
             serviceOfflineOverlay.classList.add('hiding');
-            // Use an event listener for when the animation ends to remove classes.
-            // This is more robust than a fixed setTimeout.
             serviceOfflineOverlay.addEventListener('animationend', () => {
                 if (serviceOfflineOverlay.classList.contains('hiding')) {
                    serviceOfflineOverlay.classList.remove('visible', 'hiding');
                 }
-            }, { once: true }); // {once: true} ensures the listener is automatically removed.
+            }, { once: true });
         } else if (isOffline && isVisible) {
              serviceOfflineOverlay.classList.remove('hiding');
         }
         
-        return !isOffline; // Return true if the service is ONLINE
+        return !isOffline;
     }
     
     function updateDisplay(state) {
@@ -980,8 +1003,9 @@ document.addEventListener('DOMContentLoaded', () => {
         loaderEl.classList.add('hidden');
         containerEl.classList.add('visible');
         logoEl.classList.add('visible');
-        videoPlayerContainer.classList.add('box-enter-animation');
-
+        if (isInitialLoad) {
+            videoPlayerContainer.classList.add('box-enter-animation');
+        }
 
         const line = state.linesData[state.currentLineKey];
         if (!line) return;
@@ -1178,7 +1202,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("      SERVER HARZAFI v4 (Visualizzatore Ripristinato)")
+    print("      SERVER HARZAFI v5 (Miglioramenti Audio/Video)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
