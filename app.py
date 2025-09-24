@@ -377,7 +377,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                 </div>
                 <div class="control-group">
                     <label>Annuncio Vocale</label>
-                    <button id="announce-btn" title="Annuncia" class="btn-primary" style="padding: 12px;">ANNUNCIA PROSSIMA FERMATA</button>
+                    <button id="announce-btn" title="Annuncia" class="btn-primary" style="padding: 12px;">ANNUNCIA LINEA.</button>
                 </div>
             </div>
         </section>
@@ -510,7 +510,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getDefaultData() {
         return {
-            "3": { "direction": "CORSA DEVIATA", "stops": [{ "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL" }, { "name": "PRIMULE", "subtitle": "" }, { "name": "PERVINCHE", "subtitle": "" }, { "name": "SANSOVINO", "subtitle": "" }, { "name": "CINCINNATO", "subtitle": "MERCATO RIONALE" }, { "name": "LOMBARDIA", "subtitle": "PISCINA LOMBARDIA" }, { "name": "BORSI", "subtitle": "" }, { "name": "LARGO TOSCANA", "subtitle": "" }, { "name": "LARGO BORGARO", "subtitle": "" }, { "name": "PIERO DELLA FRANCESCA", "subtitle": "MUSEO A COME AMBIENTE" }, { "name": "OSPEDALE AMEDEO DI SAVOIA", "subtitle": "DIPARTIMENTO DI INFORMATICA" }, { "name": "TASSONI", "subtitle": "" }, { "name": "AVELLINO", "subtitle": "" }, { "name": "LIVORNO", "subtitle": "" }, { "name": "INDUSTRIA", "subtitle": "" }, { "name": "RONDÒ FORCA OVEST", "subtitle": "MARIA AUSILIATRICE" }, { "name": "OSPEDALE COTTOLENGO", "subtitle": "ANAGRAFE CENTRALE" }, { "name": "PORTA PALAZZO", "subtitle": "PIAZZA DELLA REPUBBLICA" }, { "name": "PORTA PALAZZO EST", "subtitle": "PIAZZA DELLA REPUBBLICA" }, { "name": "XI FEBBRAIO", "subtitle": "AUTOSTAZIONE DORA" }, { "name": "GIARDINI REALI", "subtitle": "RONDÒ RIVELLA" }, { "name": "ROSSINI", "subtitle": "MOLE ANTONELLIANA" }, { "name": "CAMPUS EINAUDI", "subtitle": "" }, { "name": "LARGO BERARDI", "subtitle": "" }, { "name": "OSPEDALE GRADENIGO", "subtitle": "" }, { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL" }] }
+            "3": { "direction": "CORSA DEVIATA", "stops": [{ "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL" }, { "name": "PRIMULE", "subtitle": "" }, { "name": "PERVINCHE", "subtitle": "" }, { "name": "SANSOVINO", "subtitle": "" }, { "name": "CINCINNATO", "subtitle": "MERCATO RIONALE" }, { "name": "LOMBARDIA", "subtitle": "FERMATA PIU VICINA PER LA PISCINA LOMBARDIA" }, { "name": "BORSI", "subtitle": "" }, { "name": "LARGO TOSCANA", "subtitle": "" }, { "name": "LARGO BORGARO", "subtitle": "" }, { "name": "PIERO DELLA FRANCESCA", "subtitle": "FERMATA PIU VICINA PER IL MUSEO A COME AMBIENTE" }, { "name": "OSPEDALE AMEDEO DI SAVOIA", "subtitle": "UNIVERSITÀ - DIPARTIMENTO DI INFORMATICA" }, { "name": "TASSONI", "subtitle": "" }, { "name": "AVELLINO", "subtitle": "" }, { "name": "LIVORNO", "subtitle": "" }, { "name": "INDUSTRIA", "subtitle": "" }, { "name": "RONDÒ FORCA OVEST", "subtitle": "MARIA AUSILIATRICE" }, { "name": "OSPEDALE COTTOLENGO", "subtitle": "ANAGRAFE CENTRALE" }, { "name": "PORTA PALAZZO", "subtitle": "PIAZZA DELLA REPUBBLICA" }, { "name": "PORTA PALAZZO EST", "subtitle": "PIAZZA DELLA REPUBBLICA" }, { "name": "XI FEBBRAIO", "subtitle": "AUTOSTAZIONE DORA" }, { "name": "GIARDINI REALI", "subtitle": "RONDÒ RIVELLA" }, { "name": "ROSSINI", "subtitle": "MOLE ANTONELLIANA" }, { "name": "CAMPUS EINAUDI", "subtitle": "" }, { "name": "LARGO BERARDI", "subtitle": "" }, { "name": "OSPEDALE GRADENIGO", "subtitle": "" }, { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL" }] }
         };
     }
 
@@ -788,13 +788,13 @@ VISUALIZZATORE_COMPLETO_HTML = """
         .current-stop-indicator.enter-reverse { animation: slideInFromBottomFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
         
         .text-content { padding-left: 70px; width: 100%; overflow: hidden; }
-        .direction-header { font-size: 30px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
-        #direction-name { font-size: 70px; font-weight: 900; margin: 5px 0 60px 0; text-transform: uppercase; }
-        .next-stop-header { font-size: 28px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
-        #stop-name { font-size: 140px; font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase; white-space: normal; opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
+        .direction-header { font-size: 24px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #direction-name { font-size: 56px; font-weight: 900; margin: 5px 0 60px 0; text-transform: uppercase; }
+        .next-stop-header { font-size: 22px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #stop-name { font-size: 112px; font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase; white-space: normal; opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
         #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
         #stop-name.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
-        #stop-subtitle { font-size: 42px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
+        #stop-subtitle { font-size: 34px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
         
         .logo {
             position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
@@ -835,8 +835,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; text-align: center; padding: 20px; box-sizing: border-box;
         }
-        .placeholder-content h2 { font-size: 2vw; font-weight: 900; margin: 0 0 15px 0; text-transform: uppercase; }
-        .placeholder-content p { font-size: 1.2vw; opacity: 0.8; margin: 0; }
+        .placeholder-content h2 { font-size: 1.6vw; font-weight: 700; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
         
         .box-enter-animation { animation: box-enter 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .box-exit-animation { animation: box-exit 0.6s ease-out forwards; }
@@ -902,7 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
             newContent = `<video id="ad-video" loop playsinline autoplay src="${videoUrl}"></video>`;
         } else {
-            newContent = `<div class="placeholder-content"><h2>NESSUN MEDIA DISPONIBILE</h2></div>`;
+            newContent = `<div class="placeholder-content"><h2>NESSUN VIDEO IN RIPRODUZIONE</h2></div>`;
         }
         
         if (videoPlayerContainer.innerHTML !== newContent) {
@@ -939,7 +938,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function adjustFontSize(element) {
-        const maxFontSize = 140; const minFontSize = 40;
+        const maxFontSize = 112; const minFontSize = 40;
         element.style.fontSize = maxFontSize + 'px'; let currentFontSize = maxFontSize;
         while ((element.scrollWidth > element.parentElement.clientWidth || element.scrollHeight > element.parentElement.clientHeight) && currentFontSize > minFontSize) {
             currentFontSize -= 2; element.style.fontSize = currentFontSize + 'px';
@@ -947,15 +946,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkServiceStatus(state) {
-        if (state.serviceStatus === 'offline') {
+        const isOffline = state.serviceStatus === 'offline';
+        const isVisible = serviceOfflineOverlay.classList.contains('visible');
+
+        if (isOffline && !isVisible) {
+            serviceOfflineOverlay.classList.remove('hiding');
             serviceOfflineOverlay.classList.add('visible');
-            return false;
-        }
-        if (serviceOfflineOverlay.classList.contains('visible')) {
+        } else if (!isOffline && isVisible) {
             serviceOfflineOverlay.classList.add('hiding');
-            setTimeout(() => serviceOfflineOverlay.classList.remove('visible', 'hiding'), 600);
+            // Use an event listener for when the animation ends to remove classes.
+            // This is more robust than a fixed setTimeout.
+            serviceOfflineOverlay.addEventListener('animationend', () => {
+                if (serviceOfflineOverlay.classList.contains('hiding')) {
+                   serviceOfflineOverlay.classList.remove('visible', 'hiding');
+                }
+            }, { once: true }); // {once: true} ensures the listener is automatically removed.
+        } else if (isOffline && isVisible) {
+             serviceOfflineOverlay.classList.remove('hiding');
         }
-        return true;
+        
+        return !isOffline; // Return true if the service is ONLINE
     }
     
     function updateDisplay(state) {
@@ -970,6 +980,8 @@ document.addEventListener('DOMContentLoaded', () => {
         loaderEl.classList.add('hidden');
         containerEl.classList.add('visible');
         logoEl.classList.add('visible');
+        videoPlayerContainer.classList.add('box-enter-animation');
+
 
         const line = state.linesData[state.currentLineKey];
         if (!line) return;
