@@ -1,6 +1,7 @@
 Flask
 Flask-SocketIO
 Flask-Login
+Flask-WTF
 gunicorn
 eventlet
 werkzeug
