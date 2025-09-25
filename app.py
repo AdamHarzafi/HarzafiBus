@@ -275,9 +275,9 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         button:disabled { background: #3A3A3C; color: #86868B; cursor: not-allowed; transform: none !important; }
         button:not(:disabled):hover { filter: brightness(1.1); }
         button:not(:disabled):active { transform: scale(0.98); }
-        .btn-primary { background: var(--blue); color: var(--white); }
-        .btn-success { background: var(--success); color: var(--white); }
-        .btn-danger { background: var(--danger); color: var(--white); }
+        .btn-primary { background: var(--blue); color: var(--text-primary); }
+        .btn-success { background: var(--success); color: var(--text-primary); }
+        .btn-danger { background: var(--danger); color: var(--text-primary); }
         .btn-secondary { background: var(--content-background-light); color: var(--text-primary); border: 1px solid var(--border-color); }
         #status-card {
             background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary)); padding: 25px;
@@ -317,6 +317,15 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         }
         input:checked + .slider { background-color: var(--success); }
         input:checked + .slider:before { transform: translateX(22px); }
+        .media-controls { display: flex; gap: 10px; align-items: center; }
+        .media-controls button { width: 44px; height: 44px; padding: 0; font-size: 16px; flex-shrink: 0; }
+        .volume-container { display: flex; align-items: center; background-color: #3A3A3C; border-radius: 12px; padding: 0 15px; flex-grow: 1; height: 44px; }
+        #volume-slider { width: 100%; padding: 0; margin-left: 10px; background: transparent; border: none; }
+        #volume-slider:focus { box-shadow: none; }
+        input[type=range] { -webkit-appearance: none; background: transparent; cursor: pointer; }
+        input[type=range]::-webkit-slider-runnable-track { height: 4px; background: var(--border-color); border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--text-primary); border-radius: 50%; border: none; }
+        #media-controls-container.disabled { opacity: 0.4; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -384,7 +393,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
 
         <section class="control-section">
             <h2>Gestione Media e Messaggi</h2>
-             <p class="subtitle">Carica contenuti video o imposta messaggi informativi a scorrimento.</p>
+             <p class="subtitle">Carica contenuti video, controlla la riproduzione o imposta messaggi a scorrimento.</p>
              <div class="grid">
                  <div>
                     <label for="embed-code-input">Codice Embed (iframe)</label>
@@ -400,6 +409,18 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                      <label for="info-messages-input">Messaggi a scorrimento (uno per riga)</label>
                      <textarea id="info-messages-input" placeholder="Benvenuti a bordo..."></textarea>
                      <button id="save-messages-btn" class="btn-primary" style="margin-top: 10px;">Salva Messaggi</button>
+                 </div>
+                 <div>
+                    <label>Controlli Riproduzione</label>
+                    <div id="media-controls-container" class="media-controls">
+                        <button id="seek-back-btn" class="btn-secondary" title="Indietro 5s">«</button>
+                        <button id="play-pause-btn" class="btn-secondary" title="Play/Pausa">▶</button>
+                        <button id="seek-fwd-btn" class="btn-secondary" title="Avanti 5s">»</button>
+                        <div class="volume-container">
+                            <span id="volume-icon">🔊</span>
+                            <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" title="Volume">
+                        </div>
+                    </div>
                  </div>
              </div>
         </section>
@@ -461,17 +482,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!socket.connected) return;
         const state = {
             linesData: linesData, currentLineKey: currentLineKey, currentStopIndex: currentStopIndex,
-            mediaSource: localStorage.getItem('busSystem-mediaSource'), embedCode: localStorage.getItem('busSystem-embedCode'),
-            videoName: localStorage.getItem('busSystem-videoName'), mediaLastUpdated: localStorage.getItem('busSystem-mediaLastUpdated'),
-            muteState: localStorage.getItem('busSystem-muteState') || 'muted', volumeLevel: localStorage.getItem('busSystem-volumeLevel') || '1.0',
+            mediaSource: localStorage.getItem('busSystem-mediaSource'),
+            embedCode: localStorage.getItem('busSystem-embedCode'),
+            videoName: localStorage.getItem('busSystem-videoName'),
+            mediaLastUpdated: localStorage.getItem('busSystem-mediaLastUpdated'),
+            volumeLevel: localStorage.getItem('busSystem-volumeLevel') || '1.0',
             playbackState: localStorage.getItem('busSystem-playbackState') || 'playing',
-            videoProgress: JSON.parse(localStorage.getItem('busSystem-videoProgress') || 'null'),
+            seekAction: JSON.parse(localStorage.getItem('busSystem-seekAction') || 'null'),
             infoMessages: JSON.parse(localStorage.getItem('busSystem-infoMessages') || '[]'),
             serviceStatus: serviceStatus,
             announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null')
         };
         socket.emit('update_all', state);
+        // Reset one-time actions
         if (state.announcement) localStorage.removeItem('busSystem-playAnnouncement');
+        if (state.seekAction) localStorage.removeItem('busSystem-seekAction');
     }
 
     const importVideoBtn = document.getElementById('import-video-btn');
@@ -503,6 +528,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceStatusToggle = document.getElementById('service-status-toggle');
     const serviceStatusText = document.getElementById('service-status-text');
     const resetDataBtn = document.getElementById('reset-data-btn');
+    
+    // Media Controls
+    const mediaControlsContainer = document.getElementById('media-controls-container');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const volumeSlider = document.getElementById('volume-slider');
+    const volumeIcon = document.getElementById('volume-icon');
+    const seekBackBtn = document.getElementById('seek-back-btn');
+    const seekFwdBtn = document.getElementById('seek-fwd-btn');
 
     let linesData = {}, currentLineKey = null, currentStopIndex = 0, serviceStatus = 'online';
 
@@ -534,6 +567,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadMediaStatus() {
         const mediaSource = localStorage.getItem('busSystem-mediaSource');
         const videoName = localStorage.getItem('busSystem-videoName');
+        const hasMedia = mediaSource === 'embed' || (mediaSource === 'server' && videoName);
+        
+        mediaControlsContainer.classList.toggle('disabled', !hasMedia);
+
         if (mediaSource === 'embed') {
             mediaUploadStatusText.textContent = `Media da Embed attivo.`;
             removeMediaBtn.style.display = 'inline-block';
@@ -566,7 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const tempDiv = document.createElement('div'); tempDiv.innerHTML = rawCode;
         const iframe = tempDiv.querySelector('iframe'); if (!iframe) { alert('Tag <iframe> non trovato.'); return; }
         iframe.setAttribute('width', '100%'); iframe.setAttribute('height', '100%');
-        iframe.setAttribute('style', 'position:absolute; top:0; left:0; width:100%; height:100%;');
+        iframe.setAttribute('style', 'position:absolute; top:0; left:0; width:100%; height:100%; border:0;');
         localStorage.setItem('busSystem-mediaSource', 'embed');
         localStorage.setItem('busSystem-embedCode', iframe.outerHTML);
         localStorage.removeItem('busSystem-videoName');
@@ -645,17 +682,60 @@ document.addEventListener('DOMContentLoaded', () => {
         renderStatusDisplay();
         sendFullStateUpdate();
     }
+    
+    // --- Media Controls Logic ---
+    function setupMediaControls() {
+        // Load initial values
+        const initialVolume = localStorage.getItem('busSystem-volumeLevel') || '1.0';
+        const initialPlaybackState = localStorage.getItem('busSystem-playbackState') || 'playing';
+        
+        volumeSlider.value = initialVolume;
+        updateVolumeIcon(initialVolume);
+        
+        playPauseBtn.innerHTML = initialPlaybackState === 'playing' ? '❚❚' : '▶';
+
+        // Event Listeners
+        playPauseBtn.addEventListener('click', () => {
+            let currentState = localStorage.getItem('busSystem-playbackState') || 'playing';
+            const newState = currentState === 'playing' ? 'paused' : 'playing';
+            localStorage.setItem('busSystem-playbackState', newState);
+            playPauseBtn.innerHTML = newState === 'playing' ? '❚❚' : '▶';
+            sendFullStateUpdate();
+        });
+
+        volumeSlider.addEventListener('input', () => {
+            const newVolume = volumeSlider.value;
+            localStorage.setItem('busSystem-volumeLevel', newVolume);
+            updateVolumeIcon(newVolume);
+            sendFullStateUpdate();
+        });
+
+        seekBackBtn.addEventListener('click', () => {
+            localStorage.setItem('busSystem-seekAction', JSON.stringify({ value: -5, timestamp: Date.now() }));
+            sendFullStateUpdate();
+        });
+
+        seekFwdBtn.addEventListener('click', () => {
+            localStorage.setItem('busSystem-seekAction', JSON.stringify({ value: 5, timestamp: Date.now() }));
+            sendFullStateUpdate();
+        });
+    }
+
+    function updateVolumeIcon(volume) {
+        const vol = parseFloat(volume);
+        if (vol === 0) { volumeIcon.textContent = '🔇'; }
+        else if (vol < 0.5) { volumeIcon.textContent = '🔈'; }
+        else { volumeIcon.textContent = '🔊'; }
+    }
 
     function initialize() {
         loadMediaStatus();
+        setupMediaControls();
         loadData();
         loadMessages();
-        
-        // Force service to 'online' on panel start to ensure visualizer is always active on open.
         serviceStatus = 'online';
         saveServiceStatus();
         renderServiceStatus();
-        
         currentLineKey = localStorage.getItem('busSystem-currentLine');
         currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex'), 10) || 0;
         renderAll();
@@ -818,37 +898,30 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
         @keyframes fadeInBlur { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
+        
         #video-player-container {
-            width: 100%; max-width: 100%; background-color: rgba(0, 0, 0, 0.2);
+            width: 100%; max-width: 100%; background-color: #000;
             border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
             position: relative;
             transition: opacity 0.5s ease, transform 0.5s ease;
         }
-        #ad-video {
-            width: 100%; height: 100%; object-fit: cover; border-radius: 25px; display: block;
-            position: absolute; top: 0; left: 0;
-            transition: volume 0.4s ease-in-out;
-        }
-        
-        #video-player-container iframe {
-            border-radius: 25px;
-        }
+        #video-player-container iframe { border-radius: 25px; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         .placeholder-content {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; align-items: center;
-            justify-content: center; text-align: center; padding: 20px; box-sizing: border-box;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            text-align: center; padding: 20px; box-sizing: border-box;
         }
-        .placeholder-content h2 {
-            font-size: 1.6vw;
-            font-weight: 900;
-            margin: 0;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        .placeholder-content h2 { font-size: 1.6vw; font-weight: 900; margin: 0; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .video-background-blur {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            filter: blur(30px) brightness(0.7); transform: scale(1.15);
+            opacity: 0.8; overflow: hidden;
         }
+        #ad-video-bg, #ad-video { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        #ad-video-bg { object-fit: cover; }
+        #ad-video { object-fit: contain; z-index: 10; }
         
         .box-enter-animation { animation: box-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -898,11 +971,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applyMediaState(state) {
         const videoEl = document.getElementById('ad-video');
-        if (videoEl) {
-            videoEl.muted = (state.muteState === 'muted');
-            videoEl.volume = parseFloat(state.volumeLevel);
-            if (state.playbackState === 'playing' && videoEl.paused) videoEl.play().catch(e => {});
-            else if (state.playbackState === 'paused' && !videoEl.paused) videoEl.pause();
+        if (!videoEl) return;
+
+        // Volume
+        const newVolume = parseFloat(state.volumeLevel);
+        if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
+
+        // Playback State
+        if (state.playbackState === 'playing' && videoEl.paused) {
+            videoEl.play().catch(e => console.error("Playback failed:", e));
+        } else if (state.playbackState === 'paused' && !videoEl.paused) {
+            videoEl.pause();
+        }
+        
+        // Seek Action (one-time event)
+        if (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0)) {
+            const newTime = videoEl.currentTime + state.seekAction.value;
+            videoEl.currentTime = Math.max(0, Math.min(newTime, isNaN(videoEl.duration) ? Infinity : videoEl.duration));
         }
     }
     
@@ -912,25 +997,25 @@ document.addEventListener('DOMContentLoaded', () => {
             newContent = state.embedCode;
         } else if (state.mediaSource === 'server') {
             const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
-            newContent = `<video id="ad-video" loop playsinline autoplay src="${videoUrl}"></video>`;
+            newContent = `
+                <div class="video-background-blur">
+                    <video id="ad-video-bg" loop playsinline autoplay muted src="${videoUrl}"></video>
+                </div>
+                <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
         } else {
             newContent = `<div class="placeholder-content"><h2>NESSUN VIDEO IN RIPRODUZIONE</h2></div>`;
         }
         
-        const currentContent = videoPlayerContainer.innerHTML;
-        if (currentContent !== newContent) {
-            videoPlayerContainer.classList.remove('box-enter-animation');
-            videoPlayerContainer.classList.add('box-exit-animation');
-            
-            setTimeout(() => {
-                videoPlayerContainer.innerHTML = newContent;
-                videoPlayerContainer.classList.remove('box-exit-animation');
-                videoPlayerContainer.classList.add('box-enter-animation');
-                applyMediaState(state);
-            }, 500);
-        } else {
-            applyMediaState(state);
-        }
+        videoPlayerContainer.classList.remove('box-enter-animation');
+        videoPlayerContainer.classList.add('box-exit-animation');
+        
+        setTimeout(() => {
+            videoPlayerContainer.innerHTML = newContent;
+            videoPlayerContainer.classList.remove('box-exit-animation');
+            videoPlayerContainer.classList.add('box-enter-animation');
+            // Re-apply state immediately after new element is added
+            applyMediaState(state); 
+        }, 500);
     }
 
     const loaderEl = document.getElementById('loader');
@@ -945,11 +1030,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function playAnnouncement() {
         const videoEl = document.getElementById('ad-video');
-        let originalVolume = 1.0;
+        const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
         
         if (videoEl && !videoEl.muted) {
-            originalVolume = videoEl.volume;
-            videoEl.volume = Math.min(originalVolume, 0.2); // Abbassa il volume
+            videoEl.volume = Math.min(originalVolume, 0.15); // Lower the volume
         }
         
         announcementSound.currentTime = 0;
@@ -957,7 +1041,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         announcementSound.onended = () => {
             if (videoEl) {
-                videoEl.volume = originalVolume; // Ripristina il volume originale
+                videoEl.volume = originalVolume; // Restore to the user-set volume
             }
         };
     }
@@ -987,7 +1071,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (isOffline && isVisible) {
              serviceOfflineOverlay.classList.remove('hiding');
         }
-        
         return !isOffline;
     }
     
@@ -999,11 +1082,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const isInitialLoad = !lastKnownState.currentLineKey;
         const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
         const stopIndexChanged = lastKnownState.currentStopIndex !== state.currentStopIndex;
+        const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
 
         loaderEl.classList.add('hidden');
         containerEl.classList.add('visible');
         logoEl.classList.add('visible');
         if (isInitialLoad) {
+            videoPlayerContainer.style.opacity = '1';
             videoPlayerContainer.classList.add('box-enter-animation');
         }
 
@@ -1043,7 +1128,7 @@ document.addEventListener('DOMContentLoaded', () => {
             playAnnouncement();
         }
 
-        if (isInitialLoad || state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0)) {
+        if (isInitialLoad || mediaChanged) {
             loadMediaOrPlaceholder(state);
         } else {
             applyMediaState(state);
@@ -1202,7 +1287,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("      SERVER HARZAFI v5 (Miglioramenti Audio/Video)")
+    print("      SERVER HARZAFI v6 (Controlli Video e UX Migliorata)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
