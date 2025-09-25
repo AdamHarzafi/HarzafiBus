@@ -183,7 +183,7 @@ LOGIN_PAGE_HTML = """
                     {{ form.password(id="password", class="form-control", required=True) }}
                     <button type="button" id="password-toggle" title="Mostra/Nascondi password">
                         <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 4C7 4 2.73 7.11 1 11.5 2.73 15.89 7 19 12 19s9.27-3.11 11-7.5C21.27 7.11 17 4 12 4zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49.2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75.99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67.24-1.38.37-2.14.37-2.76 0-5-2.24-5-5 0-.76.13-1.47.37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
+                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49 .2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75.99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67 .24-1.38 .37-2.14 .37-2.76 0-5-2.24-5-5 0-.76 .13-1.47 .37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
                     </button>
                 </div>
             </div>
@@ -900,28 +900,36 @@ VISUALIZZATORE_COMPLETO_HTML = """
         @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
         
         #video-player-container {
-            width: 100%; max-width: 100%; background-color: #000;
+            width: 100%; max-width: 100%; background-color: transparent;
             border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
             position: relative;
             transition: opacity 0.5s ease, transform 0.5s ease;
         }
-        #video-player-container iframe { border-radius: 25px; }
+        #video-player-container::before {
+            content: '';
+            position: absolute;
+            top: -30px; left: -30px; right: -30px; bottom: -30px;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            filter: blur(25px) brightness(0.7);
+            z-index: 1;
+        }
+        #video-player-container iframe { border-radius: 25px; z-index: 2; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         .placeholder-content {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            text-align: center; padding: 20px; box-sizing: border-box;
+            text-align: center; padding: 20px; box-sizing: border-box; z-index: 2;
         }
         .placeholder-content h2 { font-size: 1.6vw; font-weight: 900; margin: 0; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }
         .video-background-blur {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             filter: blur(30px) brightness(0.7); transform: scale(1.15);
-            opacity: 0.8; overflow: hidden;
+            opacity: 0.8; overflow: hidden; z-index: 3;
         }
         #ad-video-bg, #ad-video { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
         #ad-video-bg { object-fit: cover; }
-        #ad-video { object-fit: contain; z-index: 10; }
+        #ad-video { object-fit: contain; z-index: 4; }
         
         .box-enter-animation { animation: box-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -971,23 +979,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applyMediaState(state) {
         const videoEl = document.getElementById('ad-video');
+        const videoBgEl = document.getElementById('ad-video-bg');
         if (!videoEl) return;
 
         // Volume
         const newVolume = parseFloat(state.volumeLevel);
         if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
 
-        // Playback State
-        if (state.playbackState === 'playing' && videoEl.paused) {
-            videoEl.play().catch(e => console.error("Playback failed:", e));
-        } else if (state.playbackState === 'paused' && !videoEl.paused) {
-            videoEl.pause();
+        // Playback State (Applied to both main and background video)
+        if (state.playbackState === 'playing') {
+            if (videoEl.paused) videoEl.play().catch(e => {});
+            if (videoBgEl && videoBgEl.paused) videoBgEl.play().catch(e => {});
+        } else if (state.playbackState === 'paused') {
+            if (!videoEl.paused) videoEl.pause();
+            if (videoBgEl && !videoBgEl.paused) videoBgEl.pause();
         }
         
-        // Seek Action (one-time event)
+        // Seek Action (one-time event, applied to both)
         if (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0)) {
             const newTime = videoEl.currentTime + state.seekAction.value;
-            videoEl.currentTime = Math.max(0, Math.min(newTime, isNaN(videoEl.duration) ? Infinity : videoEl.duration));
+            const finalTime = Math.max(0, Math.min(newTime, isNaN(videoEl.duration) ? Infinity : videoEl.duration));
+            videoEl.currentTime = finalTime;
+            if (videoBgEl) {
+                videoBgEl.currentTime = finalTime;
+            }
         }
     }
     
@@ -999,7 +1014,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
             newContent = `
                 <div class="video-background-blur">
-                    <video id="ad-video-bg" loop playsinline autoplay muted src="${videoUrl}"></video>
+                    <video id="ad-video-bg" loop playsinline muted src="${videoUrl}"></video>
                 </div>
                 <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
         } else {
@@ -1287,7 +1302,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("      SERVER HARZAFI v6 (Controlli Video e UX Migliorata)")
+    print("      SERVER HARZAFI v7 (Sfondo Dinamico e Sync Corretto)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
