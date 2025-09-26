@@ -92,7 +92,7 @@ current_video_file = {'data': None, 'mimetype': None, 'name': None}
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
 # -------------------------------------------------------------------
 
-# --- PAGINA DI LOGIN (INVARIATA) ---
+# --- PAGINA DI LOGIN (FUNZIONANTE) ---
 LOGIN_PAGE_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -210,7 +210,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (MODIFICATO SOLO L'IFRAME SRC) ---
+# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (CON ANTEPRIMA RIDIMENSIONATA E INTERATTIVA) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -327,9 +327,10 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--text-primary); border-radius: 50%; border: none; }
         #media-controls-container.disabled { opacity: 0.4; pointer-events: none; }
 
+        /* NUOVO CSS PER L'ANTEPRIMA RIDIMENSIONATA E INTERATTIVA */
         .preview-wrapper {
-            max-width: 720px;
-            margin: 0 auto 20px auto;
+            max-width: 720px; /* Imposta una larghezza massima per rimpicciolire */
+            margin: 0 auto 20px auto; /* Centra l'anteprima e aggiunge spazio sotto */
         }
         .viewer-preview-container {
             position: relative;
@@ -429,7 +430,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             <p class="subtitle">Questa è un'anteprima live e interattiva. Puoi cliccare e interagire direttamente con gli elementi al suo interno.</p>
             <div class="preview-wrapper">
                 <div class="viewer-preview-container">
-                    <iframe id="viewer-iframe-preview" src="{{ url_for('pagina_visualizzatore', preview='true') }}" frameborder="0"></iframe>
+                    <iframe id="viewer-iframe-preview" src="{{ url_for('pagina_visualizzatore') }}" frameborder="0"></iframe>
                 </div>
             </div>
             <div class="preview-controls">
@@ -540,11 +541,11 @@ document.addEventListener('DOMContentLoaded', () => {
             announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null')
         };
         socket.emit('update_all', state);
+        // Reset one-time actions
         if (state.announcement) localStorage.removeItem('busSystem-playAnnouncement');
         if (state.seekAction) localStorage.removeItem('busSystem-seekAction');
     }
 
-    // Selettori elementi DOM (invariati)
     const importVideoBtn = document.getElementById('import-video-btn');
     const videoImporter = document.getElementById('video-importer');
     const importEmbedBtn = document.getElementById('import-embed-btn');
@@ -574,6 +575,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceStatusToggle = document.getElementById('service-status-toggle');
     const serviceStatusText = document.getElementById('service-status-text');
     const resetDataBtn = document.getElementById('reset-data-btn');
+    
+    // Media Controls
     const mediaControlsContainer = document.getElementById('media-controls-container');
     const playPauseBtn = document.getElementById('play-pause-btn');
     const volumeSlider = document.getElementById('volume-slider');
@@ -589,7 +592,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Funzioni di gestione dati (invariate)
     function loadData() { linesData = JSON.parse(localStorage.getItem('busSystem-linesData')) || getDefaultData(); saveData(); }
     function saveData() { localStorage.setItem('busSystem-linesData', JSON.stringify(linesData)); sendFullStateUpdate(); }
     function loadMessages() {
@@ -597,6 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
         infoMessagesInput.value = messages ? JSON.parse(messages).join('\\n') : ["Benvenuti a bordo del servizio Harzafi.", "Si prega di mantenere il corretto distanziamento."].join('\\n');
         if (!messages) saveMessages(false);
     }
+
     function saveMessages(showFeedback = true) {
         const messagesArray = infoMessagesInput.value.split('\\n').filter(msg => msg.trim() !== '');
         localStorage.setItem('busSystem-infoMessages', JSON.stringify(messagesArray));
@@ -607,11 +610,14 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => { saveMessagesBtn.textContent = originalText; saveMessagesBtn.classList.remove('btn-success'); saveMessagesBtn.classList.add('btn-primary'); }, 2000);
         }
     }
+
     function loadMediaStatus() {
         const mediaSource = localStorage.getItem('busSystem-mediaSource');
         const videoName = localStorage.getItem('busSystem-videoName');
         const hasMedia = mediaSource === 'embed' || (mediaSource === 'server' && videoName);
+        
         mediaControlsContainer.classList.toggle('disabled', !hasMedia);
+
         if (mediaSource === 'embed') {
             mediaUploadStatusText.textContent = `Media da Embed attivo.`;
             removeMediaBtn.style.display = 'inline-block';
@@ -623,6 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
             removeMediaBtn.style.display = 'none';
         }
     }
+
     async function handleLocalVideoUpload(event) {
         const file = event.target.files[0]; if (!file) return;
         importVideoBtn.disabled = true; importVideoBtn.textContent = 'CARICAMENTO...';
@@ -658,6 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
         loadMediaStatus(); sendFullStateUpdate();
     }
+
     function saveServiceStatus() { localStorage.setItem('busSystem-serviceStatus', serviceStatus); sendFullStateUpdate(); }
     function renderServiceStatus() {
         const isOnline = serviceStatus === 'online';
@@ -666,7 +674,6 @@ document.addEventListener('DOMContentLoaded', () => {
         serviceStatusToggle.checked = isOnline;
     }
 
-    // Funzioni di rendering (invariate)
     function renderAll() { renderNavigationPanel(); renderManagementPanel(); renderStatusDisplay(); }
     function renderNavigationPanel() {
         lineSelector.innerHTML = '';
@@ -723,7 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sendFullStateUpdate();
     }
     
-    // Logica controlli media (invariata)
+    // --- Media Controls Logic ---
     function setupMediaControls() {
         const initialVolume = localStorage.getItem('busSystem-volumeLevel') || '1.0';
         const initialPlaybackState = localStorage.getItem('busSystem-playbackState') || 'playing';
@@ -738,21 +745,25 @@ document.addEventListener('DOMContentLoaded', () => {
             playPauseBtn.innerHTML = newState === 'playing' ? '❚❚' : '▶';
             sendFullStateUpdate();
         });
+
         volumeSlider.addEventListener('input', () => {
             const newVolume = volumeSlider.value;
             localStorage.setItem('busSystem-volumeLevel', newVolume);
             updateVolumeIcon(newVolume);
             sendFullStateUpdate();
         });
+
         seekBackBtn.addEventListener('click', () => {
             localStorage.setItem('busSystem-seekAction', JSON.stringify({ value: -5, timestamp: Date.now() }));
             sendFullStateUpdate();
         });
+
         seekFwdBtn.addEventListener('click', () => {
             localStorage.setItem('busSystem-seekAction', JSON.stringify({ value: 5, timestamp: Date.now() }));
             sendFullStateUpdate();
         });
     }
+
     function updateVolumeIcon(volume) {
         const vol = parseFloat(volume);
         if (vol === 0) { volumeIcon.textContent = '🔇'; }
@@ -760,7 +771,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else { volumeIcon.textContent = '🔊'; }
     }
     
-    // Logica di controllo anteprima (invariata)
+    // --- NUOVA LOGICA PER CONTROLLO ANTEPRIMA ---
     function setupPreviewControls() {
         const previewIframe = document.getElementById('viewer-iframe-preview');
         const togglePlaybackBtn = document.getElementById('toggle-preview-playback-btn');
@@ -768,7 +779,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const updateButtonState = () => {
             if (videoInIframe) {
-                togglePlaybackBtn.textContent = videoInIframe.paused ? '▶ Riproduci in anteprima' : '❚❚ Pausa in anteprima';
+                if (videoInIframe.paused) {
+                    togglePlaybackBtn.textContent = '▶ Riproduci in anteprima';
+                } else {
+                    togglePlaybackBtn.textContent = '❚❚ Pausa in anteprima';
+                }
             }
         };
         
@@ -777,18 +792,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
                 videoInIframe = iframeDoc.getElementById('ad-video');
                 const announcementAudio = iframeDoc.getElementById('announcement-sound');
-                if (announcementAudio) announcementAudio.muted = true;
+
+                if (announcementAudio) announcementAudio.muted = true; // Sempre muto in anteprima
                 
                 if (videoInIframe) {
-                    videoInIframe.muted = true;
-                    videoInIframe.pause();
+                    videoInIframe.muted = true; // Audio sempre muto per evitare sovrapposizioni
+                    videoInIframe.pause(); // Inizia in pausa di default
+                    
                     videoInIframe.addEventListener('play', updateButtonState);
                     videoInIframe.addEventListener('pause', updateButtonState);
+
                     togglePlaybackBtn.disabled = false;
                     updateButtonState();
                 } else {
                     throw new Error("Elemento video non trovato.");
                 }
+
             } catch (e) {
                 console.warn("Contenuto dell'iframe non accessibile (potrebbe essere un embed esterno). I controlli di riproduzione sono disabilitati.");
                 togglePlaybackBtn.disabled = true;
@@ -798,17 +817,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         togglePlaybackBtn.addEventListener('click', () => {
             if (videoInIframe && !togglePlaybackBtn.disabled) {
-                if (videoInIframe.paused) videoInIframe.play();
-                else videoInIframe.pause();
+                if (videoInIframe.paused) {
+                    videoInIframe.play();
+                } else {
+                    videoInIframe.pause();
+                }
             }
         });
     }
 
-    // Inizializzazione e listener eventi (invariati)
     function initialize() {
         loadMediaStatus();
         setupMediaControls();
-        setupPreviewControls();
+        setupPreviewControls(); // Inizializza i nuovi controlli
         loadData();
         loadMessages();
         serviceStatus = 'online';
@@ -875,7 +896,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (CON MODALITÀ ANTEPRIMA OTTIMIZZATA) ---
+# --- VISUALIZZATORE (DESIGN CORRETTO E RESPONSIVO) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -893,8 +914,18 @@ VISUALIZZATORE_COMPLETO_HTML = """
             --gradient-start: #D544A7;
             --gradient-end: #4343A2;
             --line-color: #8A2387;
+
+            /* Font size dinamiche per la responsività */
+            --fs-line-id: clamp(28px, 6vw, 48px);
+            --fs-direction-header: clamp(14px, 2.5vw, 24px);
+            --fs-direction-name: clamp(26px, 6vw, 56px);
+            --fs-next-stop: clamp(12px, 2.2vw, 22px);
+            --fs-stop-name: clamp(40px, 12vw, 112px);
+            --fs-stop-subtitle: clamp(16px, 3.5vw, 34px);
         }
-        html { font-size: 16px; }
+        html {
+            font-size: 16px; /* Imposta una base per le unità rem */
+        }
         body {
             margin: 0;
             font-family: 'Montserrat', sans-serif;
@@ -904,7 +935,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
             width: 100vw;
             display: flex;
             overflow: hidden;
-            box-sizing: border-box;
         }
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -914,108 +944,131 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         #loader img { width: 250px; max-width: 70%; animation: pulse-logo 2s infinite ease-in-out; }
         #loader p { margin-top: 25px; font-size: 1.2em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; }
-        @keyframes pulse-logo { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+        @keyframes pulse-logo {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
         #loader.hidden { opacity: 0; pointer-events: none; }
         
-        /* Layout Standard */
         .main-content-wrapper { flex: 3; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 2.5rem; }
         .video-wrapper { flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; padding: 2.5rem; box-sizing: border-box; }
+        
         .container { display: flex; align-items: center; width: 100%; height: 100%; opacity: 0; transition: opacity 0.8s ease; }
         .container.visible { opacity: 1; }
-        .line-graphic { flex-shrink: 0; width: clamp(80px, 15vw, 120px); height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
-        .line-graphic::before { content: ''; position: absolute; top: 0; bottom: 0; margin: auto 0; left: 50%; transform: translateX(-50%); width: clamp(8px, 1.2vw, 12px); height: 70%; background-color: rgba(255, 255, 255, 0.3); border-radius: 6px; z-index: 1; }
-        .line-id-container { position: absolute; top: 15%; width: clamp(60px, 12vw, 100px); height: clamp(60px, 12vw, 100px); background-color: var(--main-text-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 2; box-shadow: 0 5px 25px rgba(0,0,0,0.2); border: 4px solid var(--gradient-end); }
-        #line-id { font-size: clamp(28px, 6vw, 48px); font-weight: 900; color: var(--line-color); }
-        .current-stop-indicator { position: absolute; top: 50%; transform: translate(-50%, -50%); width: clamp(30px, 7vw, 60px); height: clamp(30px, 7vw, 60px); background-color: var(--main-text-color); border-radius: 12px; z-index: 2; box-shadow: 0 0 20px rgba(255,255,255,0.7); }
-        .text-content { padding-left: clamp(20px, 5vw, 70px); width: 100%; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
-        .direction-header { font-size: clamp(14px, 2.5vw, 24px); }
-        #direction-name { font-size: clamp(26px, 6vw, 56px); }
-        .next-stop-header { font-size: clamp(12px, 2.2vw, 22px); }
-        #stop-name { font-size: clamp(40px, 12vw, 112px); }
-        #stop-subtitle { font-size: clamp(16px, 3.5vw, 34px); }
-        .logo { position: absolute; bottom: 2.5rem; right: 3rem; width: clamp(120px, 18vw, 220px); opacity: 0; filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease; }
-        .logo.visible { opacity: 0.9; }
 
-        /* Stili comuni */
-        .direction-header, #direction-name, .next-stop-header, #stop-name, #stop-subtitle { font-weight: 700; margin: 0; text-transform: uppercase; line-height: 1.2; }
-        #direction-name { font-weight: 900; margin: 0.2em 0 1em 0; }
-        #stop-name { font-weight: 900; }
-        #stop-subtitle { font-weight: 400; opacity: 0.9; margin-top: 0.3em; }
+        .line-graphic {
+            flex-shrink: 0;
+            width: clamp(80px, 15vw, 120px); /* Larghezza responsiva */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .line-graphic::before {
+            content: ''; position: absolute; top: 0; bottom: 0; margin: auto 0;
+            left: 50%; transform: translateX(-50%);
+            width: clamp(8px, 1.2vw, 12px); /* Spessore linea responsivo */
+            height: 70%;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 6px; z-index: 1;
+        }
+        .line-id-container {
+            position: absolute;
+            top: 15%;
+            width: clamp(60px, 12vw, 100px); /* Dimensione responsiva */
+            height: clamp(60px, 12vw, 100px);
+            background-color: var(--main-text-color);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            z-index: 2; box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+            border: 4px solid var(--gradient-end);
+        }
+        #line-id { font-size: var(--fs-line-id); font-weight: 900; color: var(--line-color); }
+        .current-stop-indicator {
+            position: absolute;
+            top: 50%; /* Centrato verticalmente */
+            transform: translate(-50%, -50%);
+            width: clamp(30px, 7vw, 60px); /* Dimensione responsiva */
+            height: clamp(30px, 7vw, 60px);
+            background-color: var(--main-text-color);
+            border-radius: 12px; z-index: 2;
+            box-shadow: 0 0 20px rgba(255,255,255,0.7);
+        }
+        .current-stop-indicator.exit { opacity: 0; transform: translate(-50%, -50%) scale(0.5); transition: opacity 0.4s, transform 0.4s; }
+        .current-stop-indicator.enter { animation: slideInFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
+        
+        .text-content { 
+            padding-left: clamp(20px, 5vw, 70px); 
+            width: 100%; 
+            overflow: hidden; 
+            display: flex; flex-direction: column; justify-content: center;
+        }
+        .direction-header { font-size: var(--fs-direction-header); font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #direction-name { font-size: var(--fs-direction-name); font-weight: 900; margin: 0.2em 0 1em 0; text-transform: uppercase; }
+        .next-stop-header { font-size: var(--fs-next-stop); font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #stop-name { 
+            font-size: var(--fs-stop-name); 
+            font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase;
+            white-space: normal;
+        }
+        #stop-subtitle { font-size: var(--fs-stop-subtitle); font-weight: 400; margin: 0.3em 0 0 0; text-transform: uppercase; opacity: 0.9; }
+        
+        .animated-text { opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
         .animated-text.exit { opacity: 0; transform: translateY(-20px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
         .animated-text.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
+
+        .logo {
+            position: absolute; bottom: 2.5rem; right: 3rem; 
+            width: clamp(120px, 18vw, 220px);
+            opacity: 0;
+            filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
+        }
+        .logo.visible { opacity: 0.9; }
+
         @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* ---------------------------------------------------- */
-        /* --- NUOVO: Stili specifici per la MODALITÀ ANTEPRIMA --- */
-        /* ---------------------------------------------------- */
-        body.preview-mode {
-            flex-direction: column; /* Layout verticale */
-            justify-content: center;
-            padding: 0.5rem;
-        }
-        body.preview-mode .main-content-wrapper {
-            flex: 1 1 auto; /* Occupa lo spazio necessario */
-            height: auto;
-            padding: 0;
-            width: 100%;
-        }
-        body.preview-mode .container {
-            flex-direction: column; /* Anche il container interno diventa verticale */
-            justify-content: center;
-            text-align: center;
-            gap: 0.5rem;
-        }
-        body.preview-mode .line-graphic {
-            display: none; /* Nascondi la barra verticale per risparmiare spazio */
-        }
-        body.preview-mode .text-content {
-            padding-left: 0; /* Rimuovi padding */
-            order: 1; /* Testo prima del video */
-        }
-        /* Riduci drasticamente le dimensioni dei font per l'anteprima */
-        body.preview-mode .direction-header { font-size: 0.7rem; }
-        body.preview-mode #direction-name { font-size: 1.1rem; margin: 0.1em 0 0.5em 0; }
-        body.preview-mode .next-stop-header { font-size: 0.6rem; }
-        body.preview-mode #stop-name { font-size: 2.2rem; }
-        body.preview-mode #stop-subtitle { font-size: 0.8rem; }
-        body.preview-mode .video-wrapper {
-            flex: 1 1 auto;
-            width: 100%;
-            max-height: 40%; /* Limita altezza video */
-            padding: 0;
-            order: 2; /* Video dopo il testo */
-        }
-        body.preview-mode #video-player-container {
-            border-radius: 12px; /* Riduci bordi */
-        }
-        body.preview-mode .logo {
-            display: none; /* Nascondi il logo per risparmiare spazio */
-        }
-
-        /* Contenuti Video e Overlay (invariati) */
         #service-offline-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; pointer-events: none; }
         #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
-        #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; }
-        #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; }
+        #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; margin: 0; text-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
         @keyframes fadeInBlur { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
-        #video-player-container { width: 100%; background-color: transparent; border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; transition: opacity 0.5s ease, transform 0.5s ease; }
+        
+        #video-player-container {
+            width: 100%; max-width: 100%; background-color: transparent;
+            border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden; display: flex; align-items: center; justify-content: center;
+            position: relative;
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         #video-player-container iframe { position: absolute; top:0; left:0; width:100%; height:100%; border: 0; border-radius: 25px; }
-        .placeholder-content { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; box-sizing: border-box; z-index: 2; }
-        .placeholder-content h2 { font-size: 1.6vw; font-weight: 900; text-transform: uppercase; }
-        .video-background-blur { position: absolute; top: 0; left: 0; width: 100%; height: 100%; filter: blur(30px) brightness(0.7); transform: scale(1.15); opacity: 0.8; overflow: hidden; z-index: 3; }
+        
+        .placeholder-content {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            text-align: center; padding: 20px; box-sizing: border-box; z-index: 2;
+        }
+        .placeholder-content h2 { font-size: 1.6vw; font-weight: 900; margin: 0; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .video-background-blur {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            filter: blur(30px) brightness(0.7); transform: scale(1.15);
+            opacity: 0.8; overflow: hidden; z-index: 3;
+        }
         #ad-video-bg, #ad-video { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
         #ad-video-bg { object-fit: cover; }
         #ad-video { object-fit: contain; z-index: 4; }
+        
         .box-enter-animation { animation: box-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
     </style>
 </head>
-<body class="{% if is_preview %}preview-mode{% endif %}">
+<body>
     <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
     <div id="loader">
         <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
@@ -1028,9 +1081,9 @@ VISUALIZZATORE_COMPLETO_HTML = """
                 <div id="stop-indicator" class="current-stop-indicator"></div>
             </div>
             <div class="text-content">
-                <p class="direction-header animated-text">DESTINAZIONE</p>
+                <p class="direction-header animated-text">DESTINAZIONE - DESTINATION</p>
                 <h1 id="direction-name" class="animated-text"></h1>
-                <p class="next-stop-header animated-text">PROSSIMA FERMATA</p>
+                <p class="next-stop-header animated-text">PROSSIMA FERMATA - NEXT STOP</p>
                 <h2 id="stop-name" class="animated-text"></h2>
                 <p id="stop-subtitle" class="animated-text"></p>
             </div>
@@ -1049,7 +1102,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
     </div>
 
 <script>
-// Il Javascript rimane invariato, le modifiche sono solo nel CSS e nel body tag.
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
@@ -1061,9 +1113,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const videoBgEl = document.getElementById('ad-video-bg');
         if (!videoEl) return;
 
+        // Volume
         const newVolume = parseFloat(state.volumeLevel);
         if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
 
+        // Playback State (Applied to both main and background video)
         if (state.playbackState === 'playing') {
             if (videoEl.paused) videoEl.play().catch(e => {});
             if (videoBgEl && videoBgEl.paused) videoBgEl.play().catch(e => {});
@@ -1072,10 +1126,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (videoBgEl && !videoBgEl.paused) videoBgEl.pause();
         }
         
+        // Seek Action (one-time event, applied to both)
         if (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0)) {
             const newTime = videoEl.currentTime + state.seekAction.value;
-            videoEl.currentTime = Math.max(0, Math.min(newTime, isNaN(videoEl.duration) ? Infinity : videoEl.duration));
-            if (videoBgEl) videoBgEl.currentTime = videoEl.currentTime;
+            const finalTime = Math.max(0, Math.min(newTime, isNaN(videoEl.duration) ? Infinity : videoEl.duration));
+            videoEl.currentTime = finalTime;
+            if (videoBgEl) {
+                videoBgEl.currentTime = finalTime;
+            }
         }
     }
     
@@ -1091,7 +1149,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
         } else {
-            newContent = `<div class="placeholder-content"><h2>NESSUN VIDEO</h2></div>`;
+            newContent = `<div class="placeholder-content"><h2>NESSUN VIDEO IN RIPRODUZIONE</h2></div>`;
         }
         
         videoPlayerContainer.classList.remove('box-enter-animation');
@@ -1101,6 +1159,7 @@ document.addEventListener('DOMContentLoaded', () => {
             videoPlayerContainer.innerHTML = newContent;
             videoPlayerContainer.classList.remove('box-exit-animation');
             videoPlayerContainer.classList.add('box-enter-animation');
+            // Re-apply state immediately after new element is added
             applyMediaState(state); 
         }, 500);
     }
@@ -1116,15 +1175,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function playAnnouncement() {
         const videoEl = document.getElementById('ad-video');
         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
-        if (videoEl && !videoEl.muted) videoEl.volume = Math.min(originalVolume, 0.15);
+        
+        if (videoEl && !videoEl.muted) {
+            videoEl.volume = Math.min(originalVolume, 0.15); // Lower the volume
+        }
+        
         announcementSound.currentTime = 0;
         announcementSound.play().catch(e => console.error("Errore riproduzione annuncio:", e));
-        announcementSound.onended = () => { if (videoEl) videoEl.volume = originalVolume; };
+        
+        announcementSound.onended = () => {
+            if (videoEl) {
+                videoEl.volume = originalVolume; // Restore to the user-set volume
+            }
+        };
     }
 
     function checkServiceStatus(state) {
         const isOffline = state.serviceStatus === 'offline';
         const isVisible = serviceOfflineOverlay.classList.contains('visible');
+
         if (isOffline && !isVisible) {
             serviceOfflineOverlay.classList.remove('hiding');
             serviceOfflineOverlay.classList.add('visible');
@@ -1142,7 +1211,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updateDisplay(state) {
-        if (!checkServiceStatus(state) || !state.linesData || !state.currentLineKey) return;
+        if (!checkServiceStatus(state) || !state.linesData || !state.currentLineKey) {
+            return;
+        }
 
         const isInitialLoad = !lastKnownState.currentLineKey;
         const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
@@ -1169,14 +1240,18 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         if (!isInitialLoad && (lineChanged || stopIndexChanged)) {
-            if(stopIndicatorEl) stopIndicatorEl.classList.add('exit');
+            stopIndicatorEl.classList.add('exit');
             textElements.forEach(el => el.classList.add('exit'));
+            
             setTimeout(() => {
                 updateContent();
-                if(stopIndicatorEl) stopIndicatorEl.className = 'current-stop-indicator enter';
-                textElements.forEach(el => { el.classList.remove('exit'); el.classList.add('enter'); });
+                stopIndicatorEl.className = 'current-stop-indicator enter';
+                textElements.forEach(el => {
+                    el.classList.remove('exit');
+                    el.classList.add('enter');
+                });
                 setTimeout(() => {
-                    if(stopIndicatorEl) stopIndicatorEl.classList.remove('enter');
+                    stopIndicatorEl.classList.remove('enter');
                     textElements.forEach(el => el.classList.remove('enter'));
                 }, 500);
             }, 300);
@@ -1197,8 +1272,14 @@ document.addEventListener('DOMContentLoaded', () => {
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
     
-    socket.on('connect', () => { loaderEl.querySelector('p').textContent = "Connesso..."; socket.emit('request_initial_state'); });
-    socket.on('disconnect', () => { loaderEl.classList.remove('hidden'); loaderEl.querySelector('p').textContent = "Connessione persa..."; });
+    socket.on('connect', () => {
+        loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
+        socket.emit('request_initial_state');
+    });
+    socket.on('disconnect', () => {
+        loaderEl.classList.remove('hidden');
+        loaderEl.querySelector('p').textContent = "Connessione persa...";
+    });
     socket.on('initial_state', updateDisplay);
     socket.on('state_updated', updateDisplay);
 });
@@ -1208,16 +1289,20 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 # -------------------------------------------------------------------
-# 4. ROUTE E API WEBSOCKET (MODIFICATA LA ROUTE DEL VISUALIZZATORE)
+# 4. ROUTE E API WEBSOCKET (CON SICUREZZA POTENZIATA E CORRETTA)
 # -------------------------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
+
     form = LoginForm()
+
     if form.validate_on_submit():
         username = form.username.data
+
+        # 1. Controlla PRIMA se l'utente è bloccato
         if username in login_attempts:
             attempt_info = login_attempts[username]
             if attempt_info['attempts'] >= MAX_ATTEMPTS:
@@ -1228,6 +1313,8 @@ def login():
                     return render_template_string(LOGIN_PAGE_HTML, form=form)
                 else:
                     login_attempts.pop(username, None)
+
+        # 2. Se non è bloccato, controlla la password
         user_in_db = USERS_DB.get(username)
         if user_in_db and check_password_hash(user_in_db['password_hash'], form.password.data):
             login_attempts.pop(username, None)
@@ -1235,16 +1322,22 @@ def login():
             login_user(user)
             return redirect(request.args.get('next') or url_for('dashboard'))
         else:
+            # Fallimento: registra il tentativo e mostra il messaggio
             if username not in login_attempts:
                 login_attempts[username] = {'attempts': 0, 'time': None}
+            
             login_attempts[username]['attempts'] += 1
             login_attempts[username]['time'] = datetime.now()
+
             remaining = MAX_ATTEMPTS - login_attempts[username]['attempts']
             if remaining > 0:
                 flash(f"Credenziali non valide. Hai ancora {remaining} tentativi.", "error")
             else:
                 flash(f"Account bloccato per {LOCKOUT_TIME_MINUTES} minuti.", "error")
+            
             return render_template_string(LOGIN_PAGE_HTML, form=form)
+    
+    # Questo viene eseguito per la richiesta GET iniziale
     return render_template_string(LOGIN_PAGE_HTML, form=form)
 
 
@@ -1262,14 +1355,13 @@ def dashboard():
 @app.route('/visualizzatore')
 @login_required
 def pagina_visualizzatore():
-    # MODIFICA CHIAVE: Controlla se è in modalità anteprima e passa la variabile al template
-    is_preview = request.args.get('preview', 'false').lower() == 'true'
-    return render_template_string(VISUALIZZATORE_COMPLETO_HTML, is_preview=is_preview)
+    return render_template_string(VISUALIZZATORE_COMPLETO_HTML)
 
 @app.route('/announcement-audio')
 @login_required
 def announcement_audio():
     try:
+        # Assicurati che il file MP3 sia nella stessa cartella di app.py
         return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
@@ -1331,7 +1423,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v12 (Anteprima Ottimizzata)")
+    print("   SERVER HARZAFI v11 (Layout Responsivo e Interattività Migliorata)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
