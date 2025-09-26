@@ -210,7 +210,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (CON ANTEPRIMA VISUALIZZATORE) ---
+# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (CON ANTEPRIMA RIDIMENSIONATA E INTERATTIVA) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -327,7 +327,11 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--text-primary); border-radius: 50%; border: none; }
         #media-controls-container.disabled { opacity: 0.4; pointer-events: none; }
 
-        /* NUOVO CSS PER L'ANTEPRIMA */
+        /* NUOVO CSS PER L'ANTEPRIMA RIDIMENSIONATA E INTERATTIVA */
+        .preview-wrapper {
+            max-width: 720px; /* Imposta una larghezza massima per rimpicciolire */
+            margin: 0 auto 20px auto; /* Centra l'anteprima e aggiunge spazio sotto */
+        }
         .viewer-preview-container {
             position: relative;
             width: 100%;
@@ -336,6 +340,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             border-radius: 16px;
             overflow: hidden;
             border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
         .viewer-preview-container iframe {
             position: absolute;
@@ -344,6 +349,16 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             width: 100%;
             height: 100%;
             border: 0;
+        }
+        .preview-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .preview-controls .btn {
+            width: auto;
+            flex-shrink: 0;
         }
     </style>
 </head>
@@ -411,12 +426,17 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         </section>
 
         <section class="control-section">
-            <h2>Anteprima Visualizzatore</h2>
-            <p class="subtitle">Visualizza in tempo reale cosa viene mostrato sullo schermo del passeggero. Le modifiche sono istantanee.</p>
-            <div class="viewer-preview-container">
-                <iframe src="{{ url_for('pagina_visualizzatore') }}" frameborder="0"></iframe>
+            <h2>Anteprima Interattiva</h2>
+            <p class="subtitle">Questa è un'anteprima live e interattiva. Puoi cliccare e interagire direttamente con gli elementi al suo interno.</p>
+            <div class="preview-wrapper">
+                <div class="viewer-preview-container">
+                    <iframe id="viewer-iframe-preview" src="{{ url_for('pagina_visualizzatore') }}" frameborder="0"></iframe>
+                </div>
             </div>
-            <a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-secondary" style="margin-top: 15px; text-align: center; display: block;">Apri in Schermo Intero</a>
+            <div class="preview-controls">
+                <button id="toggle-preview-playback-btn" class="btn btn-secondary">▶ Riproduci in anteprima</button>
+                <a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-secondary">Apri in Schermo Intero</a>
+            </div>
         </section>
         <section class="control-section">
             <h2>Gestione Media e Messaggi</h2>
@@ -438,7 +458,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                      <button id="save-messages-btn" class="btn-primary" style="margin-top: 10px;">Salva Messaggi</button>
                  </div>
                  <div>
-                    <label>Controlli Riproduzione</label>
+                    <label>Controlli Riproduzione (Globale)</label>
                     <div id="media-controls-container" class="media-controls">
                         <button id="seek-back-btn" class="btn-secondary" title="Indietro 5s">«</button>
                         <button id="play-pause-btn" class="btn-secondary" title="Play/Pausa">▶</button>
@@ -712,16 +732,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- Media Controls Logic ---
     function setupMediaControls() {
-        // Load initial values
         const initialVolume = localStorage.getItem('busSystem-volumeLevel') || '1.0';
         const initialPlaybackState = localStorage.getItem('busSystem-playbackState') || 'playing';
-        
         volumeSlider.value = initialVolume;
         updateVolumeIcon(initialVolume);
-        
         playPauseBtn.innerHTML = initialPlaybackState === 'playing' ? '❚❚' : '▶';
 
-        // Event Listeners
         playPauseBtn.addEventListener('click', () => {
             let currentState = localStorage.getItem('busSystem-playbackState') || 'playing';
             const newState = currentState === 'playing' ? 'paused' : 'playing';
@@ -754,10 +770,66 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (vol < 0.5) { volumeIcon.textContent = '🔈'; }
         else { volumeIcon.textContent = '🔊'; }
     }
+    
+    // --- NUOVA LOGICA PER CONTROLLO ANTEPRIMA ---
+    function setupPreviewControls() {
+        const previewIframe = document.getElementById('viewer-iframe-preview');
+        const togglePlaybackBtn = document.getElementById('toggle-preview-playback-btn');
+        let videoInIframe = null;
+
+        const updateButtonState = () => {
+            if (videoInIframe) {
+                if (videoInIframe.paused) {
+                    togglePlaybackBtn.textContent = '▶ Riproduci in anteprima';
+                } else {
+                    togglePlaybackBtn.textContent = '❚❚ Pausa in anteprima';
+                }
+            }
+        };
+        
+        previewIframe.addEventListener('load', () => {
+            try {
+                const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
+                videoInIframe = iframeDoc.getElementById('ad-video');
+                const announcementAudio = iframeDoc.getElementById('announcement-sound');
+
+                if (announcementAudio) announcementAudio.muted = true; // Sempre muto in anteprima
+                
+                if (videoInIframe) {
+                    videoInIframe.muted = true; // Audio sempre muto per evitare sovrapposizioni
+                    videoInIframe.pause(); // Inizia in pausa di default
+                    
+                    videoInIframe.addEventListener('play', updateButtonState);
+                    videoInIframe.addEventListener('pause', updateButtonState);
+
+                    togglePlaybackBtn.disabled = false;
+                    updateButtonState();
+                } else {
+                    throw new Error("Elemento video non trovato.");
+                }
+
+            } catch (e) {
+                console.warn("Contenuto dell'iframe non accessibile (potrebbe essere un embed esterno). I controlli di riproduzione sono disabilitati.");
+                togglePlaybackBtn.disabled = true;
+                togglePlaybackBtn.textContent = 'Riproduzione non controllabile';
+            }
+        });
+
+        togglePlaybackBtn.addEventListener('click', () => {
+            if (videoInIframe && !togglePlaybackBtn.disabled) {
+                if (videoInIframe.paused) {
+                    videoInIframe.play();
+                } else {
+                    videoInIframe.pause();
+                }
+            }
+        });
+    }
 
     function initialize() {
         loadMediaStatus();
         setupMediaControls();
+        setupPreviewControls(); // Inizializza i nuovi controlli
         loadData();
         loadMessages();
         serviceStatus = 'online';
@@ -1329,7 +1401,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("      SERVER HARZAFI v8 (Anteprima Live Integrata)")
+    print("   SERVER HARZAFI v10 (Anteprima Ridimensionata e Controllabile)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
