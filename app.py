@@ -896,7 +896,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (DESIGN CORRETTO E RESPONSIVO) ---
+# --- VISUALIZZATORE (DESIGN ORIGINALE RIPRISTINATO + AUDIO ISTANTANEO) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -914,17 +914,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
             --gradient-start: #D544A7;
             --gradient-end: #4343A2;
             --line-color: #8A2387;
-
-            /* Font size dinamiche per la responsività */
-            --fs-line-id: clamp(28px, 6vw, 48px);
-            --fs-direction-header: clamp(14px, 2.5vw, 24px);
-            --fs-direction-name: clamp(26px, 6vw, 56px);
-            --fs-next-stop: clamp(12px, 2.2vw, 22px);
-            --fs-stop-name: clamp(40px, 12vw, 112px);
-            --fs-stop-subtitle: clamp(16px, 3.5vw, 34px);
-        }
-        html {
-            font-size: 16px; /* Imposta una base per le unità rem */
         }
         body {
             margin: 0;
@@ -932,9 +921,9 @@ VISUALIZZATORE_COMPLETO_HTML = """
             background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
             color: var(--main-text-color);
             height: 100vh;
-            width: 100vw;
             display: flex;
             overflow: hidden;
+            font-size: 1.2em;
         }
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -951,84 +940,56 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         #loader.hidden { opacity: 0; pointer-events: none; }
         
-        .main-content-wrapper { flex: 3; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 2.5rem; }
-        .video-wrapper { flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; padding: 2.5rem; box-sizing: border-box; }
-        
-        .container { display: flex; align-items: center; width: 100%; height: 100%; opacity: 0; transition: opacity 0.8s ease; }
+        .main-content-wrapper { flex: 3; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 40px; }
+        .video-wrapper { flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box; }
+        .container { display: flex; align-items: center; width: 100%; max-width: 1400px; opacity: 0; transition: opacity 0.8s ease; }
         .container.visible { opacity: 1; }
-
         .line-graphic {
-            flex-shrink: 0;
-            width: clamp(80px, 15vw, 120px); /* Larghezza responsiva */
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
+            flex-shrink: 0; width: 120px; height: 500px; display: flex;
+            flex-direction: column; align-items: center; position: relative;
+            justify-content: center; padding-bottom: 80px;
         }
         .line-graphic::before {
-            content: ''; position: absolute; top: 0; bottom: 0; margin: auto 0;
-            left: 50%; transform: translateX(-50%);
-            width: clamp(8px, 1.2vw, 12px); /* Spessore linea responsivo */
-            height: 70%;
-            background-color: rgba(255, 255, 255, 0.3);
+            content: ''; position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+            width: 12px; height: 78%; background-color: rgba(255, 255, 255, 0.3);
             border-radius: 6px; z-index: 1;
         }
         .line-id-container {
-            position: absolute;
-            top: 15%;
-            width: clamp(60px, 12vw, 100px); /* Dimensione responsiva */
-            height: clamp(60px, 12vw, 100px);
-            background-color: var(--main-text-color);
+            width: 100px; height: 100px; background-color: var(--main-text-color);
             border-radius: 50%; display: flex; align-items: center; justify-content: center;
             z-index: 2; box-shadow: 0 5px 25px rgba(0,0,0,0.2);
-            border: 4px solid var(--gradient-end);
+            border: 4px solid var(--gradient-end); position: absolute;
+            top: 15%; left: 50%; transform: translateX(-50%);
         }
-        #line-id { font-size: var(--fs-line-id); font-weight: 900; color: var(--line-color); }
+        #line-id { font-size: 48px; font-weight: 900; color: var(--line-color); }
         .current-stop-indicator {
-            position: absolute;
-            top: 50%; /* Centrato verticalmente */
-            transform: translate(-50%, -50%);
-            width: clamp(30px, 7vw, 60px); /* Dimensione responsiva */
-            height: clamp(30px, 7vw, 60px);
-            background-color: var(--main-text-color);
-            border-radius: 12px; z-index: 2;
+            width: 60px; height: 60px; background-color: var(--main-text-color);
+            border-radius: 12px; z-index: 2; position: absolute; bottom: 27%;
+            left: 50%; transform: translateX(-50%); opacity: 1;
             box-shadow: 0 0 20px rgba(255,255,255,0.7);
         }
-        .current-stop-indicator.exit { opacity: 0; transform: translate(-50%, -50%) scale(0.5); transition: opacity 0.4s, transform 0.4s; }
-        .current-stop-indicator.enter { animation: slideInFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
+        .current-stop-indicator.exit { opacity: 0; transform: translateX(-50%) translateY(50px) scale(0.5); transition: opacity 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55), transform 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+        .current-stop-indicator.enter { animation: slideInFromTopFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
+        .current-stop-indicator.enter-reverse { animation: slideInFromBottomFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
         
-        .text-content { 
-            padding-left: clamp(20px, 5vw, 70px); 
-            width: 100%; 
-            overflow: hidden; 
-            display: flex; flex-direction: column; justify-content: center;
-        }
-        .direction-header { font-size: var(--fs-direction-header); font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
-        #direction-name { font-size: var(--fs-direction-name); font-weight: 900; margin: 0.2em 0 1em 0; text-transform: uppercase; }
-        .next-stop-header { font-size: var(--fs-next-stop); font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
-        #stop-name { 
-            font-size: var(--fs-stop-name); 
-            font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase;
-            white-space: normal;
-        }
-        #stop-subtitle { font-size: var(--fs-stop-subtitle); font-weight: 400; margin: 0.3em 0 0 0; text-transform: uppercase; opacity: 0.9; }
+        .text-content { padding-left: 70px; width: 100%; overflow: hidden; }
+        .direction-header { font-size: 24px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #direction-name { font-size: 56px; font-weight: 900; margin: 5px 0 60px 0; text-transform: uppercase; }
+        .next-stop-header { font-size: 22px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #stop-name { font-size: 112px; font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase; white-space: normal; opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
+        #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
+        #stop-name.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
+        #stop-subtitle { font-size: 34px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
         
-        .animated-text { opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
-        .animated-text.exit { opacity: 0; transform: translateY(-20px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
-        .animated-text.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
-
         .logo {
-            position: absolute; bottom: 2.5rem; right: 3rem; 
-            width: clamp(120px, 18vw, 220px);
-            opacity: 0;
+            position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
             filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
         }
         .logo.visible { opacity: 0.9; }
 
-        @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-        
+        @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         #service-offline-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; pointer-events: none; }
         #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
@@ -1044,9 +1005,16 @@ VISUALIZZATORE_COMPLETO_HTML = """
             position: relative;
             transition: opacity 0.5s ease, transform 0.5s ease;
         }
+        #video-player-container::before {
+            content: '';
+            position: absolute;
+            top: -30px; left: -30px; right: -30px; bottom: -30px;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            filter: blur(25px) brightness(0.7);
+            z-index: 1;
+        }
+        #video-player-container iframe { border-radius: 25px; z-index: 2; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
-        #video-player-container iframe { position: absolute; top:0; left:0; width:100%; height:100%; border: 0; border-radius: 25px; }
-        
         .placeholder-content {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
@@ -1081,11 +1049,11 @@ VISUALIZZATORE_COMPLETO_HTML = """
                 <div id="stop-indicator" class="current-stop-indicator"></div>
             </div>
             <div class="text-content">
-                <p class="direction-header animated-text">DESTINAZIONE - DESTINATION</p>
-                <h1 id="direction-name" class="animated-text"></h1>
-                <p class="next-stop-header animated-text">PROSSIMA FERMATA - NEXT STOP</p>
-                <h2 id="stop-name" class="animated-text"></h2>
-                <p id="stop-subtitle" class="animated-text"></p>
+                <p class="direction-header">DESTINAZIONE - DESTINATION</p>
+                <h1 id="direction-name"></h1>
+                <p class="next-stop-header">PROSSIMA FERMATA - NEXT STOP</p>
+                <h2 id="stop-name"></h2>
+                <p id="stop-subtitle"></p>
             </div>
         </div>
     </div>
@@ -1168,8 +1136,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const containerEl = document.querySelector('.container');
     const logoEl = document.querySelector('.logo');
     const lineIdEl = document.getElementById('line-id');
+    const directionNameEl = document.getElementById('direction-name');
+    const stopNameEl = document.getElementById('stop-name');
+    const stopSubtitleEl = document.getElementById('stop-subtitle');
     const stopIndicatorEl = document.getElementById('stop-indicator');
-    const textElements = document.querySelectorAll('.animated-text');
     const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
     function playAnnouncement() {
@@ -1188,6 +1158,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoEl.volume = originalVolume; // Restore to the user-set volume
             }
         };
+    }
+
+    function adjustFontSize(element) {
+        const maxFontSize = 112; const minFontSize = 40;
+        element.style.fontSize = maxFontSize + 'px'; let currentFontSize = maxFontSize;
+        while ((element.scrollWidth > element.parentElement.clientWidth || element.scrollHeight > element.parentElement.clientHeight) && currentFontSize > minFontSize) {
+            currentFontSize -= 2; element.style.fontSize = currentFontSize + 'px';
+        }
     }
 
     function checkServiceStatus(state) {
@@ -1234,27 +1212,28 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const updateContent = () => {
             lineIdEl.textContent = state.currentLineKey;
-            document.getElementById('direction-name').textContent = line.direction;
-            document.getElementById('stop-name').textContent = stop ? stop.name : 'CAPOLINEA';
-            document.getElementById('stop-subtitle').textContent = stop ? (stop.subtitle || '') : '';
+            directionNameEl.textContent = line.direction;
+            stopNameEl.textContent = stop ? stop.name : 'CAPOLINEA';
+            stopSubtitleEl.textContent = stop ? (stop.subtitle || '') : '';
+            adjustFontSize(stopNameEl);
         };
 
         if (!isInitialLoad && (lineChanged || stopIndexChanged)) {
-            stopIndicatorEl.classList.add('exit');
-            textElements.forEach(el => el.classList.add('exit'));
-            
+            const direction = (!isInitialLoad && stopIndexChanged && state.currentStopIndex < lastKnownState.currentStopIndex) ? 'prev' : 'next';
+            stopIndicatorEl.className = 'current-stop-indicator exit';
+            stopNameEl.className = 'exit';
             setTimeout(() => {
                 updateContent();
-                stopIndicatorEl.className = 'current-stop-indicator enter';
-                textElements.forEach(el => {
-                    el.classList.remove('exit');
-                    el.classList.add('enter');
-                });
+                stopIndicatorEl.classList.remove('exit');
+                stopNameEl.classList.remove('exit');
+                const enterClass = (direction === 'prev') ? 'enter-reverse' : 'enter';
+                stopIndicatorEl.classList.add(enterClass);
+                stopNameEl.classList.add('enter');
                 setTimeout(() => {
-                    stopIndicatorEl.classList.remove('enter');
-                    textElements.forEach(el => el.classList.remove('enter'));
+                    stopIndicatorEl.classList.remove('enter', 'enter-reverse');
+                    stopNameEl.classList.remove('enter');
                 }, 500);
-            }, 300);
+            }, 400);
         } else {
             updateContent();
         }
@@ -1361,7 +1340,6 @@ def pagina_visualizzatore():
 @login_required
 def announcement_audio():
     try:
-        # Assicurati che il file MP3 sia nella stessa cartella di app.py
         return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
@@ -1423,7 +1401,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v11 (Layout Responsivo e Interattività Migliorata)")
+    print("   SERVER HARZAFI v10 (Anteprima Ridimensionata e Controllabile)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
