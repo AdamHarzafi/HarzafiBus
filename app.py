@@ -363,6 +363,8 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     </style>
 </head>
 <body>
+    <audio id="booked-sound-preview" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
+
     <div class="main-container">
         <header class="main-header">
             <div class="header-title">
@@ -422,6 +424,12 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                     <label>Annuncio Vocale</label>
                     <button id="announce-btn" title="Annuncia" class="btn-primary" style="padding: 12px;">ANNUNCIA LINEA.</button>
                 </div>
+                
+                <div class="control-group">
+                    <label>Prenotazione Fermata</label>
+                    <button id="booked-btn" class="btn-primary" style="padding: 12px;">PRENOTA FERMATA</button>
+                </div>
+
             </div>
         </section>
 
@@ -538,11 +546,15 @@ document.addEventListener('DOMContentLoaded', () => {
             seekAction: JSON.parse(localStorage.getItem('busSystem-seekAction') || 'null'),
             infoMessages: JSON.parse(localStorage.getItem('busSystem-infoMessages') || '[]'),
             serviceStatus: serviceStatus,
-            announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null')
+            announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null'),
+            // MODIFICA 3: Aggiunto lo stato "stopRequested" all'oggetto inviato
+            stopRequested: JSON.parse(localStorage.getItem('busSystem-stopRequested') || 'null')
         };
         socket.emit('update_all', state);
         // Reset one-time actions
         if (state.announcement) localStorage.removeItem('busSystem-playAnnouncement');
+        // MODIFICA 4: Aggiunto il reset per "stopRequested"
+        if (state.stopRequested) localStorage.removeItem('busSystem-stopRequested');
         if (state.seekAction) localStorage.removeItem('busSystem-seekAction');
     }
 
@@ -576,6 +588,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceStatusText = document.getElementById('service-status-text');
     const resetDataBtn = document.getElementById('reset-data-btn');
     
+    // MODIFICA 5: Seleziono i nuovi elementi (pulsante e audio)
+    const bookedBtn = document.getElementById('booked-btn');
+    const bookedSoundPreview = document.getElementById('booked-sound-preview');
+
     // Media Controls
     const mediaControlsContainer = document.getElementById('media-controls-container');
     const playPauseBtn = document.getElementById('play-pause-btn');
@@ -852,6 +868,32 @@ document.addEventListener('DOMContentLoaded', () => {
         } else { alert('Nessuna linea attiva selezionata.'); } 
     });
     serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
+    
+    // MODIFICA 6: Aggiunto il listener per il nuovo pulsante
+    bookedBtn.addEventListener('click', () => {
+        // 1. Riproduce il suono sulla dashboard (come da tua richiesta)
+        bookedSoundPreview.currentTime = 0;
+        bookedSoundPreview.play();
+
+        // 2. Invia l'evento al visualizzatore (che non modifichiamo)
+        localStorage.setItem('busSystem-stopRequested', JSON.stringify({ timestamp: Date.now() }));
+        sendFullStateUpdate();
+        
+        // 3. Feedback visivo sul pulsante della dashboard
+        bookedBtn.textContent = 'PRENOTATA!';
+        bookedBtn.classList.add('btn-danger');
+        bookedBtn.classList.remove('btn-primary');
+        bookedBtn.disabled = true; // Disabilita per evitare click multipli
+        
+        setTimeout(() => {
+            // Resetta il pulsante dopo 2.5 secondi
+            bookedBtn.textContent = 'PRENOTA FERMATA';
+            bookedBtn.classList.remove('btn-danger');
+            bookedBtn.classList.add('btn-primary');
+            bookedBtn.disabled = false; // Riabilita
+        }, 2500); 
+    });
+
     importVideoBtn.addEventListener('click', () => videoImporter.click());
     videoImporter.addEventListener('change', handleLocalVideoUpload);
     importEmbedBtn.addEventListener('click', handleEmbedImport);
@@ -1344,6 +1386,18 @@ def announcement_audio():
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
         return Response("File audio dell'annuncio non trovato sul server.", status=404)
+
+# MODIFICA 7: Aggiunta la nuova rotta per il file 'bip.mp3'
+@app.route('/booked-stop-audio')
+@login_required
+def booked_stop_audio():
+    try:
+        # Assumo che 'bip.mp3' sia lo stesso file che mi hai passato
+        # e che si trovi nella stessa cartella di app.py
+        return send_file('bip.mp3', mimetype='audio/mpeg')
+    except FileNotFoundError:
+        print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
+        return Response("File audio di prenotazione non trovato sul server.", status=404)
 
 @app.route('/upload-video', methods=['POST'])
 @login_required
