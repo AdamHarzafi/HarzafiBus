@@ -363,8 +363,6 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     </style>
 </head>
 <body>
-    <audio id="booked-sound-preview" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
-
     <div class="main-container">
         <header class="main-header">
             <div class="header-title">
@@ -547,13 +545,11 @@ document.addEventListener('DOMContentLoaded', () => {
             infoMessages: JSON.parse(localStorage.getItem('busSystem-infoMessages') || '[]'),
             serviceStatus: serviceStatus,
             announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null'),
-            // MODIFICA 3: Aggiunto lo stato "stopRequested" all'oggetto inviato
             stopRequested: JSON.parse(localStorage.getItem('busSystem-stopRequested') || 'null')
         };
         socket.emit('update_all', state);
         // Reset one-time actions
         if (state.announcement) localStorage.removeItem('busSystem-playAnnouncement');
-        // MODIFICA 4: Aggiunto il reset per "stopRequested"
         if (state.stopRequested) localStorage.removeItem('busSystem-stopRequested');
         if (state.seekAction) localStorage.removeItem('busSystem-seekAction');
     }
@@ -588,9 +584,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceStatusText = document.getElementById('service-status-text');
     const resetDataBtn = document.getElementById('reset-data-btn');
     
-    // MODIFICA 5: Seleziono i nuovi elementi (pulsante e audio)
     const bookedBtn = document.getElementById('booked-btn');
-    const bookedSoundPreview = document.getElementById('booked-sound-preview');
+    // MODIFICA 2: Rimosso il selettore per l'audio 'bip' dalla dashboard.
+    // const bookedSoundPreview = document.getElementById('booked-sound-preview');
 
     // Media Controls
     const mediaControlsContainer = document.getElementById('media-controls-container');
@@ -869,13 +865,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
     
-    // MODIFICA 6: Aggiunto il listener per il nuovo pulsante
+    // MODIFICA 3: Modificato il listener. Ora NON riproduce più l'audio,
+    // si occupa solo di inviare l'evento e dare un feedback visivo.
     bookedBtn.addEventListener('click', () => {
-        // 1. Riproduce il suono sulla dashboard (come da tua richiesta)
-        bookedSoundPreview.currentTime = 0;
-        bookedSoundPreview.play();
+        // 1. (Rimosso) La riproduzione ora avviene sul visualizzatore.
+        // bookedSoundPreview.currentTime = 0;
+        // bookedSoundPreview.play();
 
-        // 2. Invia l'evento al visualizzatore (che non modifichiamo)
+        // 2. Invia l'evento al visualizzatore
         localStorage.setItem('busSystem-stopRequested', JSON.stringify({ timestamp: Date.now() }));
         sendFullStateUpdate();
         
@@ -1080,6 +1077,9 @@ VISUALIZZATORE_COMPLETO_HTML = """
 </head>
 <body>
     <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
+    
+    <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
+
     <div id="loader">
         <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
         <p>CONNESSIONE AL SERVER...</p>
@@ -1116,6 +1116,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
     const announcementSound = document.getElementById('announcement-sound');
+    
+    // MODIFICA 5: Selezionato l'elemento audio 'bip' del visualizzatore
+    const bookedSoundViewer = document.getElementById('booked-sound-viewer');
+
     let lastKnownState = {};
 
     function applyMediaState(state) {
@@ -1284,6 +1288,14 @@ document.addEventListener('DOMContentLoaded', () => {
             playAnnouncement();
         }
 
+        // MODIFICA 6: Aggiunta la logica per ricevere l'evento e riprodurre il suono 'bip'
+        if (state.stopRequested && state.stopRequested.timestamp > (lastKnownState.stopRequested?.timestamp || 0)) {
+            if (bookedSoundViewer) {
+                bookedSoundViewer.currentTime = 0;
+                bookedSoundViewer.play().catch(e => console.error("Errore riproduzione 'bip' prenotazione:", e));
+            }
+        }
+
         if (isInitialLoad || mediaChanged) {
             loadMediaOrPlaceholder(state);
         } else {
@@ -1387,13 +1399,10 @@ def announcement_audio():
         print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
         return Response("File audio dell'annuncio non trovato sul server.", status=404)
 
-# MODIFICA 7: Aggiunta la nuova rotta per il file 'bip.mp3'
 @app.route('/booked-stop-audio')
 @login_required
 def booked_stop_audio():
     try:
-        # Assumo che 'bip.mp3' sia lo stesso file che mi hai passato
-        # e che si trovi nella stessa cartella di app.py
         return send_file('bip.mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
