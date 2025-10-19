@@ -1402,7 +1402,7 @@ def booked_stop_audio():
         return send_file('bip.mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
-        return Response("File audio di prenotazione non trovato sul server.", status=4D4)
+        return Response("File audio di prenotazione non trovato sul server.", status=404)
 
 @app.route('/upload-video', methods=['POST'])
 @login_required
@@ -1466,3 +1466,4 @@ if __name__ == '__main__':
     print("Credenziali di default: admin / adminpass")
     print("===================================================================")
     socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+
