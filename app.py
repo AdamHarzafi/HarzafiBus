@@ -585,8 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetDataBtn = document.getElementById('reset-data-btn');
     
     const bookedBtn = document.getElementById('booked-btn');
-    // MODIFICA 2: Rimosso il selettore per l'audio 'bip' dalla dashboard.
-    // const bookedSoundPreview = document.getElementById('booked-sound-preview');
+    // L'ELEMENTO AUDIO 'bookedSoundPreview' E' STATO RIMOSSO DA QUI
 
     // Media Controls
     const mediaControlsContainer = document.getElementById('media-controls-container');
@@ -865,18 +864,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
     
-    // MODIFICA 3: Modificato il listener. Ora NON riproduce più l'audio,
-    // si occupa solo di inviare l'evento e dare un feedback visivo.
+    // QUESTO LISTENER E' STATO CORRETTO.
+    // Ora non riproduce più il suono, si limita a inviare l'evento.
     bookedBtn.addEventListener('click', () => {
-        // 1. (Rimosso) La riproduzione ora avviene sul visualizzatore.
-        // bookedSoundPreview.currentTime = 0;
-        // bookedSoundPreview.play();
-
-        // 2. Invia l'evento al visualizzatore
+        // 1. Invia l'evento al visualizzatore
         localStorage.setItem('busSystem-stopRequested', JSON.stringify({ timestamp: Date.now() }));
         sendFullStateUpdate();
         
-        // 3. Feedback visivo sul pulsante della dashboard
+        // 2. Feedback visivo sul pulsante della dashboard
         bookedBtn.textContent = 'PRENOTATA!';
         bookedBtn.classList.add('btn-danger');
         bookedBtn.classList.remove('btn-primary');
@@ -1117,7 +1112,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoPlayerContainer = document.getElementById('video-player-container');
     const announcementSound = document.getElementById('announcement-sound');
     
-    // MODIFICA 5: Selezionato l'elemento audio 'bip' del visualizzatore
+    // QUESTO E' L'ELEMENTO AUDIO PER IL 'BIP' SUL VISUALIZZATORE
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
 
     let lastKnownState = {};
@@ -1288,7 +1283,8 @@ document.addEventListener('DOMContentLoaded', () => {
             playAnnouncement();
         }
 
-        // MODIFICA 6: Aggiunta la logica per ricevere l'evento e riprodurre il suono 'bip'
+        // QUESTA E' LA LOGICA CORRETTA PER RIPRODURRE IL 'BIP'
+        // SOLO SUL VISUALIZZATORE
         if (state.stopRequested && state.stopRequested.timestamp > (lastKnownState.stopRequested?.timestamp || 0)) {
             if (bookedSoundViewer) {
                 bookedSoundViewer.currentTime = 0;
@@ -1406,7 +1402,7 @@ def booked_stop_audio():
         return send_file('bip.mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
-        return Response("File audio di prenotazione non trovato sul server.", status=404)
+        return Response("File audio di prenotazione non trovato sul server.", status=4D4)
 
 @app.route('/upload-video', methods=['POST'])
 @login_required
