@@ -159,7 +159,7 @@ LOGIN_PAGE_HTML = """
 </head>
 <body>
     <div class="login-container">
-        <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
+        <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
         <h2>Accesso Area Riservata</h2>
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -366,7 +366,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     <div class="main-container">
         <header class="main-header">
             <div class="header-title">
-                <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi">
+                <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi">
                 <h1>Pannello</h1>
             </div>
             <div class="header-actions">
@@ -585,6 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetDataBtn = document.getElementById('reset-data-btn');
     
     const bookedBtn = document.getElementById('booked-btn');
+    // L'ELEMENTO AUDIO 'bookedSoundPreview' E' STATO RIMOSSO DA QUI
 
     // Media Controls
     const mediaControlsContainer = document.getElementById('media-controls-container');
@@ -802,14 +803,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
                 videoInIframe = iframeDoc.getElementById('ad-video');
                 const announcementAudio = iframeDoc.getElementById('announcement-sound');
-                const bookedAudio = iframeDoc.getElementById('booked-sound-viewer');
 
-                if (announcementAudio) announcementAudio.muted = true;
-                if (bookedAudio) bookedAudio.muted = true;
+                if (announcementAudio) announcementAudio.muted = true; // Sempre muto in anteprima
                 
                 if (videoInIframe) {
-                    videoInIframe.muted = true;
-                    videoInIframe.pause();
+                    videoInIframe.muted = true; // Audio sempre muto per evitare sovrapposizioni
+                    videoInIframe.pause(); // Inizia in pausa di default
                     
                     videoInIframe.addEventListener('play', updateButtonState);
                     videoInIframe.addEventListener('pause', updateButtonState);
@@ -841,7 +840,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function initialize() {
         loadMediaStatus();
         setupMediaControls();
-        setupPreviewControls();
+        setupPreviewControls(); // Inizializza i nuovi controlli
         loadData();
         loadMessages();
         serviceStatus = 'online';
@@ -865,20 +864,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
     
+    // QUESTO LISTENER E' STATO CORRETTO.
+    // Ora non riproduce più il suono, si limita a inviare l'evento.
     bookedBtn.addEventListener('click', () => {
+        // 1. Invia l'evento al visualizzatore
         localStorage.setItem('busSystem-stopRequested', JSON.stringify({ timestamp: Date.now() }));
         sendFullStateUpdate();
         
+        // 2. Feedback visivo sul pulsante della dashboard
         bookedBtn.textContent = 'PRENOTATA!';
         bookedBtn.classList.add('btn-danger');
         bookedBtn.classList.remove('btn-primary');
-        bookedBtn.disabled = true;
+        bookedBtn.disabled = true; // Disabilita per evitare click multipli
         
         setTimeout(() => {
+            // Resetta il pulsante dopo 2.5 secondi
             bookedBtn.textContent = 'PRENOTA FERMATA';
             bookedBtn.classList.remove('btn-danger');
             bookedBtn.classList.add('btn-primary');
-            bookedBtn.disabled = false;
+            bookedBtn.disabled = false; // Riabilita
         }, 2500); 
     });
 
@@ -1068,10 +1072,11 @@ VISUALIZZATORE_COMPLETO_HTML = """
 </head>
 <body>
     <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
+    
     <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
 
     <div id="loader">
-        <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
+        <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
         <p>CONNESSIONE AL SERVER...</p>
     </div>
     <div class="main-content-wrapper">
@@ -1093,7 +1098,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         <div id="video-player-container" class="aspect-ratio-16-9" style="opacity: 0;"></div>
     </div>
     
-    <img src="https://i.ibb.co/8gSLmLCD/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
+    <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
     <div id="service-offline-overlay">
         <div class="overlay-content">
             <h2>NESSUN SERVIZIO</h2>
@@ -1106,6 +1111,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
     const announcementSound = document.getElementById('announcement-sound');
+    
+    // QUESTO E' L'ELEMENTO AUDIO PER IL 'BIP' SUL VISUALIZZATORE
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
 
     let lastKnownState = {};
@@ -1115,9 +1122,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const videoBgEl = document.getElementById('ad-video-bg');
         if (!videoEl) return;
 
+        // Volume
         const newVolume = parseFloat(state.volumeLevel);
         if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
 
+        // Playback State (Applied to both main and background video)
         if (state.playbackState === 'playing') {
             if (videoEl.paused) videoEl.play().catch(e => {});
             if (videoBgEl && videoBgEl.paused) videoBgEl.play().catch(e => {});
@@ -1126,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (videoBgEl && !videoBgEl.paused) videoBgEl.pause();
         }
         
+        // Seek Action (one-time event, applied to both)
         if (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0)) {
             const newTime = videoEl.currentTime + state.seekAction.value;
             const finalTime = Math.max(0, Math.min(newTime, isNaN(videoEl.duration) ? Infinity : videoEl.duration));
@@ -1158,6 +1168,7 @@ document.addEventListener('DOMContentLoaded', () => {
             videoPlayerContainer.innerHTML = newContent;
             videoPlayerContainer.classList.remove('box-exit-animation');
             videoPlayerContainer.classList.add('box-enter-animation');
+            // Re-apply state immediately after new element is added
             applyMediaState(state); 
         }, 500);
     }
@@ -1177,7 +1188,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
         
         if (videoEl && !videoEl.muted) {
-            videoEl.volume = Math.min(originalVolume, 0.15);
+            videoEl.volume = Math.min(originalVolume, 0.15); // Lower the volume
         }
         
         announcementSound.currentTime = 0;
@@ -1185,7 +1196,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         announcementSound.onended = () => {
             if (videoEl) {
-                videoEl.volume = originalVolume;
+                videoEl.volume = originalVolume; // Restore to the user-set volume
             }
         };
     }
@@ -1272,6 +1283,8 @@ document.addEventListener('DOMContentLoaded', () => {
             playAnnouncement();
         }
 
+        // QUESTA E' LA LOGICA CORRETTA PER RIPRODURRE IL 'BIP'
+        // SOLO SUL VISUALIZZATORE
         if (state.stopRequested && state.stopRequested.timestamp > (lastKnownState.stopRequested?.timestamp || 0)) {
             if (bookedSoundViewer) {
                 bookedSoundViewer.currentTime = 0;
@@ -1318,6 +1331,7 @@ def login():
     if form.validate_on_submit():
         username = form.username.data
 
+        # 1. Controlla PRIMA se l'utente è bloccato
         if username in login_attempts:
             attempt_info = login_attempts[username]
             if attempt_info['attempts'] >= MAX_ATTEMPTS:
@@ -1329,6 +1343,7 @@ def login():
                 else:
                     login_attempts.pop(username, None)
 
+        # 2. Se non è bloccato, controlla la password
         user_in_db = USERS_DB.get(username)
         if user_in_db and check_password_hash(user_in_db['password_hash'], form.password.data):
             login_attempts.pop(username, None)
@@ -1336,6 +1351,7 @@ def login():
             login_user(user)
             return redirect(request.args.get('next') or url_for('dashboard'))
         else:
+            # Fallimento: registra il tentativo e mostra il messaggio
             if username not in login_attempts:
                 login_attempts[username] = {'attempts': 0, 'time': None}
             
@@ -1350,6 +1366,7 @@ def login():
             
             return render_template_string(LOGIN_PAGE_HTML, form=form)
     
+    # Questo viene eseguito per la richiesta GET iniziale
     return render_template_string(LOGIN_PAGE_HTML, form=form)
 
 
