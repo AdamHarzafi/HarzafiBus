@@ -926,7 +926,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO CON FONT SF PRO, NUOVO LOADER E LAYOUT CORRETTO) ---
+# --- VISUALIZZATORE (DESIGN ORIGINALE RIPRISTINATO + AUDIO ISTANTANEO) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -934,8 +934,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visualizzazione Fermata Harzafi</title>
-    <link href="https://fonts.cdnfonts.com/css/sf-pro-display" rel="stylesheet">
-    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
@@ -946,16 +944,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
             --gradient-start: #D544A7;
             --gradient-end: #4343A2;
             --line-color: #8A2387;
-            
-            /* 2. Definizione stack font "San Francisco" */
-            --font-sf-display: 'SF Pro Display', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            --font-sf-text: 'SF Pro Text', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            --font-montserrat: 'Montserrat', sans-serif;
         }
-        
         body {
             margin: 0;
-            font-family: var(--font-montserrat); /* Font di default per l'app */
+            font-family: 'Montserrat', sans-serif;
             background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
             color: var(--main-text-color);
             height: 100vh;
@@ -963,125 +955,25 @@ VISUALIZZATORE_COMPLETO_HTML = """
             overflow: hidden;
             font-size: 1.2em;
         }
-
-        /* --- NUOVO LOADER OVERLAY --- */
-        #loader-overlay {
+        #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background-color: rgba(0, 0, 0, 0.3);
-            z-index: 999;
-            transition: opacity 0.8s ease-out;
-            opacity: 0;
-            pointer-events: none;
-            
-            /* 3. Applicazione Font "SF Pro" al loader */
-            font-family: var(--font-sf-text);
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            z-index: 999; transition: opacity 0.8s ease;
         }
-        #loader-overlay.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        /* Stato di Caricamento (Testo sopra, Spinner sotto) */
-        #loading-state {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            text-align: center; color: white;
-        }
-        
-        #loader-text {
-            font-size: 1.3em; 
-            font-weight: 600; /* Medium weight per SF Text */
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            opacity: 0.9;
-            margin-bottom: 35px; /* Spazio tra testo e spinner */
-        }
-
-        /* 4. Nuovo Spinner "Pulsar" */
-        .spinner-pulsar {
-            width: 60px;
-            height: 60px;
-            position: relative;
-        }
-        .spinner-pulsar::before, .spinner-pulsar::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background-color: rgba(255, 255, 255, 0.8);
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(0);
-            animation: pulsar 1.8s infinite ease-out;
-        }
-        .spinner-pulsar::after {
-            animation-delay: 0.9s; /* Secondo cerchio parte a metà animazione */
-        }
-        @keyframes pulsar {
-            0% {
-                transform: translate(-50%, -50%) scale(0);
-                opacity: 0.8;
-            }
-            100% {
-                transform: translate(-50%, -50%) scale(1);
-                opacity: 0;
-            }
-        }
-        
-        /* Stato di Benvenuto (Testo sopra, Logo sotto) */
-        #welcome-state {
-            display: none; /* Nascosto di default */
-            flex-direction: column; align-items: center; justify-content: center;
-            text-align: center; color: white;
-        }
-        #welcome-state h2 {
-            margin: 0 0 30px 0; /* Spazio tra testo e logo */
-            font-family: var(--font-sf-display); /* Font Display per il titolo */
-            font-size: 2.2em; 
-            font-weight: 700; /* Bold weight per SF Display */
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        #welcome-state .welcome-logo {
-            width: 200px; max-width: 60%;
-            animation: pulse-logo 2s infinite ease-in-out;
-            filter: drop-shadow(0 5px 15px rgba(0,0,0,0.2));
-        }
+        #loader img { width: 250px; max-width: 70%; animation: pulse-logo 2s infinite ease-in-out; }
+        #loader p { margin-top: 25px; font-size: 1.2em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; }
         @keyframes pulse-logo {
-            0% { transform: scale(1); opacity: 0.9; }
+            0% { transform: scale(1); opacity: 0.8; }
             50% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 0.9; }
+            100% { transform: scale(1); opacity: 0.8; }
         }
-        /* --- FINE NUOVO LOADER OVERLAY --- */
+        #loader.hidden { opacity: 0; pointer-events: none; }
         
-        /* Classe per sfocare il contenuto principale */
-        .content-blurred {
-            filter: blur(10px) brightness(0.7);
-            transform: scale(1.02);
-            pointer-events: none;
-            transition: filter 0.5s ease-out, transform 0.5s ease-out;
-        }
-
-        .main-content-wrapper { 
-            flex: 3; display: flex; align-items: center; justify-content: center; 
-            height: 100%; padding: 0 40px; 
-            transition: filter 0.5s ease-out, transform 0.5s ease-out;
-        }
-        .video-wrapper { 
-            flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; 
-            padding: 40px; box-sizing: border-box; 
-            transition: filter 0.5s ease-out, transform 0.5s ease-out;
-        }
-        
-        .container { 
-            display: flex; align-items: center; width: 100%; max-width: 1400px; 
-        }
+        .main-content-wrapper { flex: 3; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 40px; }
+        .video-wrapper { flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box; }
+        .container { display: flex; align-items: center; width: 100%; max-width: 1400px; opacity: 0; transition: opacity 0.8s ease; }
         .container.visible { opacity: 1; }
-
         .line-graphic {
             flex-shrink: 0; width: 120px; height: 500px; display: flex;
             flex-direction: column; align-items: center; position: relative;
@@ -1120,24 +1012,15 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #stop-subtitle { font-size: 34px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
         
         .logo {
-            position: absolute; bottom: 40px; right: 50px; width: 220px;
-            filter: brightness(1.2) contrast(1.1); 
-            transition: filter 0.5s ease-out, transform 0.5s ease-out;
+            position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
+            filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
         }
+        .logo.visible { opacity: 0.9; }
 
         @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-        
-        #service-offline-overlay { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; 
-            display: flex; align-items: center; justify-content: center; text-align: center; 
-            color: white; background-color: rgba(15, 23, 42, 0.6); 
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); 
-            opacity: 0; pointer-events: none; 
-            transition: filter 0.5s ease-out, transform 0.5s ease-out;
-            font-family: var(--font-sf-display); /* Applica SF Pro anche qui */
-        }
+        #service-offline-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; pointer-events: none; }
         #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
         #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; margin: 0; text-shadow: 0 4px 20px rgba(0,0,0,0.4); }
@@ -1151,7 +1034,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
             overflow: hidden; display: flex; align-items: center; justify-content: center;
             position: relative;
             transition: opacity 0.5s ease, transform 0.5s ease;
-            opacity: 0;
         }
         #video-player-container::before {
             content: '';
@@ -1168,11 +1050,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
             text-align: center; padding: 20px; box-sizing: border-box; z-index: 2;
         }
-        .placeholder-content h2 { 
-            font-size: 1.6vw; font-weight: 900; margin: 0; text-transform: uppercase; 
-            letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); 
-            font-family: var(--font-sf-display); /* Applica SF Pro anche qui */
-        }
+        .placeholder-content h2 { font-size: 1.6vw; font-weight: 900; margin: 0; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }
         .video-background-blur {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             filter: blur(30px) brightness(0.7); transform: scale(1.15);
@@ -1192,20 +1070,12 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
     <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
 
-    <div id="loader-overlay" class="visible">
-        <div id="loading-state">
-            <p id="loader-text">CONNESSIONE AL SERVER...</p>
-            <div class="spinner-pulsar"></div>
-        </div>
-        
-        <div id="welcome-state">
-            <h2>VI DIAMO IL BENVENUTO</h2>
-            <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="welcome-logo">
-        </div>
+    <div id="loader">
+        <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
+        <p>CONNESSIONE AL SERVER...</p>
     </div>
-
-    <div class="main-content-wrapper" id="main-content">
-        <div class="container" id="main-container">
+    <div class="main-content-wrapper">
+        <div class="container">
             <div class="line-graphic">
                 <div class="line-id-container"><span id="line-id">--</span></div>
                 <div id="stop-indicator" class="current-stop-indicator"></div>
@@ -1219,11 +1089,11 @@ VISUALIZZATORE_COMPLETO_HTML = """
             </div>
         </div>
     </div>
-    <div class="video-wrapper" id="video-content">
-        <div id="video-player-container" class="aspect-ratio-16-9"></div>
+    <div class="video-wrapper">
+        <div id="video-player-container" class="aspect-ratio-16-9" style="opacity: 0;"></div>
     </div>
     
-    <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo" id="bottom-logo">
+    <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
     <div id="service-offline-overlay">
         <div class="overlay-content">
             <h2>NESSUN SERVIZIO</h2>
@@ -1239,54 +1109,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
 
     let lastKnownState = {};
-
-    // --- NUOVI ELEMENTI E FUNZIONI DEL LOADER ---
-    const loaderOverlay = document.getElementById('loader-overlay');
-    const loadingState = document.getElementById('loading-state');
-    const loaderText = document.getElementById('loader-text');
-    const welcomeState = document.getElementById('welcome-state');
-    
-    const mainContent = document.getElementById('main-content');
-    const videoContent = document.getElementById('video-content');
-    const bottomLogo = document.getElementById('bottom-logo');
-    const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
-    const containerEl = document.getElementById('main-container');
-
-    /** Applica o rimuove la sfocatura dal contenuto principale */
-    function setContentBlurred(isBlurred) {
-        const elements = [mainContent, videoContent, bottomLogo, serviceOfflineOverlay];
-        if (isBlurred) {
-            elements.forEach(el => el.classList.add('content-blurred'));
-        } else {
-            elements.forEach(el => el.classList.remove('content-blurred'));
-        }
-    }
-
-    /** Mostra lo stato di caricamento (rotella e testo) */
-    function showLoadingState(message) {
-        loaderText.textContent = message;
-        welcomeState.style.display = 'none';
-        loadingState.style.display = 'flex';
-        loaderOverlay.classList.add('visible');
-        setContentBlurred(true);
-    }
-    
-    /** Mostra lo stato di benvenuto, poi dissolve tutto */
-    function showWelcomeState() {
-        loadingState.style.display = 'none';
-        welcomeState.style.display = 'flex';
-        loaderOverlay.classList.add('visible');
-        setContentBlurred(true); // Il contenuto è ancora sfocato durante il benvenuto
-
-        // Avvia la dissolvenza dopo un po'
-        setTimeout(() => {
-            loaderOverlay.classList.remove('visible'); // Dissolvi l'overlay
-            setContentBlurred(false); // Rimuovi la sfocatura dal contenuto
-        }, 2500); // Durata del messaggio di benvenuto (2.5 secondi)
-    }
-    
-    // --- FINE NUOVE FUNZIONI LOADER ---
-
 
     function applyMediaState(state) {
         const videoEl = document.getElementById('ad-video');
@@ -1340,12 +1162,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 500);
     }
 
-    // Elementi di visualizzazione (spostati giù)
+    const loaderEl = document.getElementById('loader');
+    const containerEl = document.querySelector('.container');
+    const logoEl = document.querySelector('.logo');
     const lineIdEl = document.getElementById('line-id');
     const directionNameEl = document.getElementById('direction-name');
     const stopNameEl = document.getElementById('stop-name');
     const stopSubtitleEl = document.getElementById('stop-subtitle');
     const stopIndicatorEl = document.getElementById('stop-indicator');
+    const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
     function playAnnouncement() {
         const videoEl = document.getElementById('ad-video');
@@ -1394,37 +1219,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function updateDisplay(state) {
-        // Modifica: Controlla se abbiamo dati validi prima di fare qualsiasi cosa
-        if (!state.linesData || !state.currentLineKey) {
-            // Se non abbiamo ancora dati, non facciamo nulla.
-            // La schermata di caricamento rimarrà attiva.
+        if (!checkServiceStatus(state) || !state.linesData || !state.currentLineKey) {
             return;
         }
 
         const isInitialLoad = !lastKnownState.currentLineKey;
-        
-        if (isInitialLoad) {
-            // PRIMO CARICAMENTO: abbiamo ricevuto dati validi!
-            // Avvia la sequenza di benvenuto.
-            showWelcomeState();
-            
-            // Imposta la visibilità iniziale degli elementi che prima erano animati
-            containerEl.classList.add('visible');
-            bottomLogo.classList.add('visible'); // 'visible' non fa nulla, ma per coerenza
-            videoPlayerContainer.style.opacity = '1'; // Rendi visibile il container video
-            videoPlayerContainer.classList.add('box-enter-animation');
-        }
-
-        // Il resto della logica di aggiornamento (sempre eseguita)
-        if (!checkServiceStatus(state)) {
-            // Lo stato del servizio è offline, ma potremmo comunque voler aggiornare
-            // il display "sotto" l'overlay offline (o forse no)
-            // Per ora, lo manteniamo così. La sfocatura gestirà il resto.
-        }
-
         const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
         const stopIndexChanged = lastKnownState.currentStopIndex !== state.currentStopIndex;
         const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
+
+        loaderEl.classList.add('hidden');
+        containerEl.classList.add('visible');
+        logoEl.classList.add('visible');
+        if (isInitialLoad) {
+            videoPlayerContainer.style.opacity = '1';
+            videoPlayerContainer.classList.add('box-enter-animation');
+        }
 
         const line = state.linesData[state.currentLineKey];
         if (!line) return;
@@ -1454,8 +1264,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     stopNameEl.classList.remove('enter');
                 }, 500);
             }, 400);
-        } else if (isInitialLoad) {
-            // Al primo caricamento, imposta solo il contenuto senza animazione
+        } else {
             updateContent();
         }
 
@@ -1480,17 +1289,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     socket.on('connect', () => {
-        showLoadingState("Connesso. In attesa di dati...");
+        loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
         socket.emit('request_initial_state');
     });
     socket.on('disconnect', () => {
-        showLoadingState("Connessione persa...");
+        loaderEl.classList.remove('hidden');
+        loaderEl.querySelector('p').textContent = "Connessione persa...";
     });
     socket.on('initial_state', updateDisplay);
     socket.on('state_updated', updateDisplay);
-
-    // Chiamata iniziale al caricamento della pagina
-    showLoadingState("CONNESSIONE AL SERVER...");
 });
 </script>
 </body>
@@ -1636,7 +1443,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v11 (Font SF Pro + Nuovo Loader)")
+    print("   SERVER HARZAFI v10 (Anteprima Ridimensionata e Controllabile)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
