@@ -704,7 +704,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Object.keys(linesData).sort().forEach(key => {
             const item = document.createElement('li');
             item.className = 'line-item';
-            item.innerHTML = `<span>${key} → ${linesData[key].direction}</span><div class="line-actions"><button class="btn-secondary edit-btn" data-id="${key}">Modifica</button><button class="btn-danger delete-btn" data-id="${key}">Elimina</button></div>`;
+            item.innerHTML = `<span>${key} → ${linesData[key].direction}</span><div class="line-actions"><button class="btn-secondary edit-btn" data-id="${key}">Modifica</button><button class="btn-danger delete-btn" data-id="${key}">Elimina</button</div>`;
             lineManagementList.appendChild(item);
         });
     }
@@ -961,8 +961,24 @@ VISUALIZZATORE_COMPLETO_HTML = """
             background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
             z-index: 999; transition: opacity 0.8s ease;
         }
-        #loader img { width: 250px; max-width: 70%; animation: pulse-logo 2s infinite ease-in-out; }
-        #loader p { margin-top: 25px; font-size: 1.2em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; }
+        /* --- MODIFICA 1: Stile per l'immagine di caricamento --- */
+        #loader img {
+            /* Vecchio stile:
+            width: 250px; max-width: 70%; animation: pulse-logo 2s infinite ease-in-out;
+            */
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+            animation: none; /* Rimuovo l'animazione pulse */
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        #loader p {
+            /* Vecchio stile:
+            margin-top: 25px; font-size: 1.2em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;
+            */
+            display: none; /* Nascosto perché l'immagine contiene già il testo */
+        }
         @keyframes pulse-logo {
             0% { transform: scale(1); opacity: 0.8; }
             50% { transform: scale(1.05); opacity: 1; }
@@ -1071,9 +1087,9 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
 
     <div id="loader">
-        <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
-        <p>CONNESSIONE AL SERVER...</p>
-    </div>
+        <img src="https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg" alt="Caricamento in corso...">
+        </div>
+
     <div class="main-content-wrapper">
         <div class="container">
             <div class="line-graphic">
@@ -1094,11 +1110,9 @@ VISUALIZZATORE_COMPLETO_HTML = """
     </div>
     
     <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
+
     <div id="service-offline-overlay">
-        <div class="overlay-content">
-            <h2>NESSUN SERVIZIO</h2>
-            <p>AL MOMENTO, IL SISTEMA NON È DISPONIBILE.</p>
-        </div>
+        <img src="https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg" alt="Servizio non disponibile" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
     </div>
 
 <script>
@@ -1148,7 +1162,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
         } else {
-            newContent = `<div class="placeholder-content"><h2>NESSUN VIDEO IN RIPRODUZIONE</h2></div>`;
+            /* --- MODIFICA 3: Immagine "Pronto" al posto del testo --- */
+            newContent = `<div class="placeholder-content" style="padding: 0; overflow: hidden;">
+                            <img src="https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg" alt="Pronto per contenuti video" style="width: 100%; height: 100%; object-fit: cover;">
+                         </div>`;
         }
         
         videoPlayerContainer.classList.remove('box-enter-animation');
@@ -1289,12 +1306,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     socket.on('connect', () => {
-        loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
+        // loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati..."; // Testo ora nascosto
         socket.emit('request_initial_state');
     });
     socket.on('disconnect', () => {
         loaderEl.classList.remove('hidden');
-        loaderEl.querySelector('p').textContent = "Connessione persa...";
+        // loaderEl.querySelector('p').textContent = "Connessione persa..."; // Testo ora nascosto
     });
     socket.on('initial_state', updateDisplay);
     socket.on('state_updated', updateDisplay);
