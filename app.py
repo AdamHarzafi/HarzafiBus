@@ -210,7 +210,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (MODIFICATO CON NUOVO PULSANTE) ---
+# --- PANNELLO DI CONTROLLO (CON ERRORE DOM CORRETTO) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -564,7 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const importEmbedBtn = document.getElementById('import-embed-btn');
     const embedCodeInput = document.getElementById('embed-code-input');
     const removeMediaBtn = document.getElementById('remove-media-btn');
-    const disableMediaBtn = document.getElementById('disable-media-btn'); // Nuovo pulsante
+    const disableMediaBtn = document.getElementById('disable-media-btn'); 
     const mediaUploadStatusText = document.getElementById('media-upload-status');
     const lineSelector = document.getElementById('line-selector');
     const prevBtn = document.getElementById('prev-btn');
@@ -627,7 +627,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Funzione aggiornata per gestire 4 stati (embed, server, disabled, null)
     function loadMediaStatus() {
         const mediaSource = localStorage.getItem('busSystem-mediaSource');
         const videoName = localStorage.getItem('busSystem-videoName');
@@ -667,7 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.removeItem('busSystem-embedCode');
             localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
             loadMediaStatus(); sendFullStateUpdate();
-        } else { alert('Errore durante il caricamento del video.'); }
+        } else { alert('Errore during the upload.'); }
         importVideoBtn.disabled = false; importVideoBtn.textContent = 'Importa Video Locale';
     }
     async function handleEmbedImport() {
@@ -685,7 +684,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadMediaStatus(); embedCodeInput.value = ''; sendFullStateUpdate();
     }
     
-    // Funzione "Rimuovi" aggiornata (ora è "Pulisci / Riattiva")
     async function removeMedia() {
         const mediaSource = localStorage.getItem('busSystem-mediaSource');
         const confirmMsg = (mediaSource === 'disabled') ? 
@@ -695,18 +693,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!confirm(confirmMsg)) return;
         
         await fetchAuthenticated('/clear-video', { method: 'POST' });
-        localStorage.removeItem('busSystem-mediaSource'); // Rimuove 'server', 'embed' o 'disabled'
+        localStorage.removeItem('busSystem-mediaSource'); 
         localStorage.removeItem('busSystem-videoName');
         localStorage.removeItem('busSystem-embedCode');
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
         loadMediaStatus(); sendFullStateUpdate();
     }
     
-    // Nuova funzione per il pulsante "Disattiva"
     async function disableMedia() {
         if (!confirm('Disattivare la riproduzione di tutti i contenuti video? Il player mostrerà un\'immagine "Non disponibile".')) return;
-        await fetchAuthenticated('/clear-video', { method: 'POST' }); // Pulisce il video sul server
-        localStorage.setItem('busSystem-mediaSource', 'disabled'); // Imposta il nuovo stato
+        await fetchAuthenticated('/clear-video', { method: 'POST' }); 
+        localStorage.setItem('busSystem-mediaSource', 'disabled'); 
         localStorage.removeItem('busSystem-videoName');
         localStorage.removeItem('busSystem-embedCode');
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
@@ -737,15 +734,21 @@ document.addEventListener('DOMContentLoaded', () => {
             lineSelector.innerHTML = '<option>Nessuna linea disponibile</option>';
         }
     }
+    
+    // --- FUNZIONE CON CORREZIONE ---
     function renderManagementPanel() {
         lineManagementList.innerHTML = '';
         Object.keys(linesData).sort().forEach(key => {
             const item = document.createElement('li');
             item.className = 'line-item';
-            item.innerHTML = `<span>${key} → ${linesData[key].direction}</span><div class="line-actions"><button class="btn-secondary edit-btn" data-id="${key}">Modifica</button><button class="btn-danger delete-btn" data-id="${key}">Elimina</button</div>`;
+            // --- ERRORE CORRETTO QUI ---
+            // Era: </button</div>`
+            // Ora: </button></div>` (aggiunto >)
+            item.innerHTML = `<span>${key} → ${linesData[key].direction}</span><div class="line-actions"><button class="btn-secondary edit-btn" data-id="${key}">Modifica</button><button class="btn-danger delete-btn" data-id="${key}">Elimina</button></div>`;
             lineManagementList.appendChild(item);
         });
     }
+
     function renderStatusDisplay() {
         const line = linesData[currentLineKey];
         const hasLine = line && line.stops && line.stops.length > 0;
@@ -859,7 +862,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
             } catch (e) {
-                console.warn("Contenuto dell'iframe non accessibile (potrebbe essere un embed esterno). I controlli di riproduzione sono disabilitati.");
+                console.warn("Contenuto iframe non accessibile. Controlli anteprima disabilitati.");
                 togglePlaybackBtn.disabled = true;
                 togglePlaybackBtn.textContent = 'Riproduzione non controllabile';
             }
@@ -924,15 +927,33 @@ document.addEventListener('DOMContentLoaded', () => {
     videoImporter.addEventListener('change', handleLocalVideoUpload);
     importEmbedBtn.addEventListener('click', handleEmbedImport);
     removeMediaBtn.addEventListener('click', removeMedia);
-    disableMediaBtn.addEventListener('click', disableMedia); // Aggiunto listener
+    disableMediaBtn.addEventListener('click', disableMedia); 
     addNewLineBtn.addEventListener('click', () => { document.getElementById('edit-line-id').value = ''; document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; lineEditorForm.reset(); stopsListContainer.innerHTML = ''; addStopToModal(); modal.showModal(); });
+    
     lineManagementList.addEventListener('click', (e) => {
-        const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
+        const target = e.target.closest('button'); 
+        if (!target) return; 
+        const lineId = target.dataset.id;
+        
         if (target.classList.contains('edit-btn')) {
-            editLineId.value = lineId; document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; const line = linesData[lineId];
-            lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; (line.stops || []).forEach(s => addStopToModal(s)); modal.showModal();
-        } if (target.classList.contains('delete-btn')) { if (confirm(`Eliminare la linea "${lineId}"?`)) { delete linesData[lineId]; saveData(); renderAll(); } }
+            editLineId.value = lineId; 
+            document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; 
+            const line = linesData[lineId];
+            lineNameInput.value = lineId; 
+            lineDirectionInput.value = line.direction; 
+            stopsListContainer.innerHTML = ''; 
+            (line.stops || []).forEach(s => addStopToModal(s)); 
+            modal.showModal();
+        } 
+        if (target.classList.contains('delete-btn')) { 
+            if (confirm(`Eliminare la linea "${lineId}"?`)) { 
+                delete linesData[lineId]; 
+                saveData(); 
+                renderAll(); 
+            } 
+        }
     });
+
     addStopBtn.addEventListener('click', () => addStopToModal());
     stopsListContainer.addEventListener('click', (e) => { if (e.target.classList.contains('remove-stop-btn')) { if (stopsListContainer.children.length > 1) e.target.parentElement.remove(); else alert('Ogni linea deve avere almeno una fermata.'); } });
     function addStopToModal(stop = { name: '', subtitle: '' }) {
@@ -965,7 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO CON TESTO "FUORI SERVIZIO" E STATO "DISABLED") ---
+# --- VISUALIZZATORE (CON LOGICA PLAYER CORRETTA) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1068,7 +1089,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         
-        /* --- MODIFICA 3: Stile "Fuori Servizio" ripristinato a TESTO --- */
+        /* Stile "Fuori Servizio" (testo) */
         #service-offline-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             z-index: 1000; display: flex; align-items: center; justify-content: center; 
@@ -1078,7 +1099,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
-        /* Regole CSS per il testo (ripristinate) */
         #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; margin: 0; text-shadow: 0 4px 20px rgba(0,0,0,0.4); }
         #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
         
@@ -1107,7 +1127,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
             text-align: center; padding: 20px; box-sizing: border-box; z-index: 2;
         }
-        /* Stile per l'immagine placeholder (Pronto, Caricamento, ecc.) */
         .placeholder-content img {
             width: 100%; height: 100%; object-fit: cover;
         }
@@ -1179,7 +1198,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyMediaState(state) {
         const videoEl = document.getElementById('ad-video');
         const videoBgEl = document.getElementById('ad-video-bg');
-        if (!videoEl) return;
+        if (!videoEl) return; // Se non c'è video (es. placeholder), non fare nulla
 
         const newVolume = parseFloat(state.volumeLevel);
         if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
@@ -1202,10 +1221,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Logica di caricamento media aggiornata per gestire 'disabled'
     function loadMediaOrPlaceholder(state) {
         let newContent = '';
-        let isLoadingMedia = false; // Flag per sapere se stiamo caricando media o solo il placeholder
+        let isLoadingMedia = false; 
 
         if (state.mediaSource === 'embed' && state.embedCode) {
             newContent = state.embedCode;
@@ -1219,7 +1237,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
             isLoadingMedia = true;
         } else if (state.mediaSource === 'disabled') {
-            // Stato "Disattivato" (richiesta 2)
+            // Stato "Disattivato"
             newContent = `<div class="placeholder-content padded">
                             <img src="https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg" alt="Contenuti non disponibili">
                          </div>`;
@@ -1232,48 +1250,40 @@ document.addEventListener('DOMContentLoaded', () => {
             isLoadingMedia = false;
         }
         
-        // Definisce l'HTML per "Carico Attendi"
         const loadingContent = `<div class="placeholder-content padded">
                                   <img src="https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg" alt="Caricamento in corso...">
                                 </div>`;
 
-        // 1. Avvia il fade-out del contenuto attuale
         videoPlayerContainer.classList.remove('box-enter-animation');
         videoPlayerContainer.classList.add('box-exit-animation');
         
         if (isLoadingMedia) {
-            // --- FLUSSO CON CARICAMENTO MEDIA ---
-            
-            // 2. Dopo il fade-out (500ms), mostra "Carico Attendi" con fade-in
+            // --- FLUSSO MEDIA ---
             setTimeout(() => {
                 videoPlayerContainer.innerHTML = loadingContent;
                 videoPlayerContainer.classList.remove('box-exit-animation');
                 videoPlayerContainer.classList.add('box-enter-animation');
-            }, 500); // Sincronizzato con la fine di box-exit-animation
+            }, 500); 
 
-            // 3. Aspetta un po' (1s) e poi avvia il fade-out di "Carico Attendi"
             setTimeout(() => {
                 videoPlayerContainer.classList.remove('box-enter-animation');
                 videoPlayerContainer.classList.add('box-exit-animation');
-            }, 1500); // 500ms (fade-in) + 1000ms (visibile)
+            }, 1500); 
 
-            // 4. Dopo il fade-out (500ms), mostra il *nuovo media* con fade-in
-            setTimeout(() => {
-                videoPlayerContainer.innerHTML = newContent;
-                videoPlayerContainer.classList.remove('box-exit-animation');
-                videoPlayerContainer.classList.add('box-enter-animation');
-                applyMediaState(state); // Applica stato (play/volume) al nuovo media
-            }, 2000); // 1500ms + 500ms (fade-out)
-
-        } else {
-            // --- FLUSSO SENZA CARICAMENTO (per "Pronto" e "Disattivato") ---
-            
-            // 2. Dopo il fade-out (500ms), mostra "Pronto" o "Disattivato" con fade-in
             setTimeout(() => {
                 videoPlayerContainer.innerHTML = newContent;
                 videoPlayerContainer.classList.remove('box-exit-animation');
                 videoPlayerContainer.classList.add('box-enter-animation');
                 applyMediaState(state); 
+            }, 2000); 
+
+        } else {
+            // --- FLUSSO PLACEHOLDER ("Pronto" o "Disattivato") ---
+            setTimeout(() => {
+                videoPlayerContainer.innerHTML = newContent;
+                videoPlayerContainer.classList.remove('box-exit-animation');
+                videoPlayerContainer.classList.add('box-enter-animation');
+                // Rimosso applyMediaState(state) perché qui non c'è <video>
             }, 500);
         }
     }
@@ -1395,11 +1405,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // --- LOGICA MEDIA CORRETTA ---
         if (isInitialLoad || mediaChanged) {
             loadMediaOrPlaceholder(state);
-        } else {
+        } else if (state.mediaSource === 'server' || state.mediaSource === 'embed') {
+            // Se il media NON è cambiato (es. cambio fermata) E c'è un video attivo,
+            // applica solo lo stato (volume, play/pausa, seek).
             applyMediaState(state);
         }
+        // Se non c'è media (Pronto/Disattivato) e il media non è cambiato, non fare nulla.
         
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
