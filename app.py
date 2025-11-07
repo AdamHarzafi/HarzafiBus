@@ -926,7 +926,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (DESIGN ORIGINALE RIPRISTINATO + AUDIO ISTANTANEO) ---
+# --- VISUALIZZATORE (MODIFICATO CON LA LOGICA DI CARICAMENTO CORRETTA) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -955,29 +955,21 @@ VISUALIZZATORE_COMPLETO_HTML = """
             overflow: hidden;
             font-size: 1.2em;
         }
+        
+        /* --- MODIFICA 1: Loader pagina ripristinato all'originale --- */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
             z-index: 999; transition: opacity 0.8s ease;
         }
-        /* --- MODIFICA 1: Stile per l'immagine di caricamento --- */
         #loader img {
-            /* Vecchio stile:
-            width: 250px; max-width: 70%; animation: pulse-logo 2s infinite ease-in-out;
-            */
-            max-width: 90%;
-            max-height: 90%;
-            object-fit: contain;
-            animation: none; /* Rimuovo l'animazione pulse */
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            width: 250px; max-width: 70%; 
+            animation: pulse-logo 2s infinite ease-in-out;
         }
         #loader p {
-            /* Vecchio stile:
-            margin-top: 25px; font-size: 1.2em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;
-            */
-            display: none; /* Nascosto perché l'immagine contiene già il testo */
+            margin-top: 25px; font-size: 1.2em; font-weight: 700; 
+            text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;
         }
         @keyframes pulse-logo {
             0% { transform: scale(1); opacity: 0.8; }
@@ -1036,11 +1028,21 @@ VISUALIZZATORE_COMPLETO_HTML = """
         @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-        #service-offline-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; pointer-events: none; }
+        
+        /* --- Overlay "Fuori Servizio" con immagine personalizzata --- */
+        #service-offline-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            z-index: 1000; display: flex; align-items: center; justify-content: center; 
+            text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); 
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); 
+            opacity: 0; pointer-events: none; 
+        }
         #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
-        #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; margin: 0; text-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-        #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        #service-offline-overlay img {
+             max-width: 90%; max-height: 90%; object-fit: contain; 
+             border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
         @keyframes fadeInBlur { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
         
@@ -1066,7 +1068,14 @@ VISUALIZZATORE_COMPLETO_HTML = """
             display: flex; flex-direction: column; align-items: center; justify-content: center; 
             text-align: center; padding: 20px; box-sizing: border-box; z-index: 2;
         }
-        .placeholder-content h2 { font-size: 1.6vw; font-weight: 900; margin: 0; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        /* Stile per l'immagine placeholder (Pronto, Caricamento, ecc.) */
+        .placeholder-content img {
+            width: 100%; height: 100%; object-fit: cover;
+        }
+        .placeholder-content.padded {
+            padding: 0; overflow: hidden;
+        }
+        
         .video-background-blur {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             filter: blur(30px) brightness(0.7); transform: scale(1.15);
@@ -1087,8 +1096,9 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
 
     <div id="loader">
-        <img src="https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg" alt="Caricamento in corso...">
-        </div>
+        <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
+        <p>CONNESSIONE AL SERVER...</p>
+    </div>
 
     <div class="main-content-wrapper">
         <div class="container">
@@ -1112,7 +1122,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
 
     <div id="service-offline-overlay">
-        <img src="https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg" alt="Servizio non disponibile" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+        <img src="https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg" alt="Servizio non disponibile">
     </div>
 
 <script>
@@ -1150,10 +1160,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // --- MODIFICA 2: Logica di caricamento media aggiornata ---
     function loadMediaOrPlaceholder(state) {
         let newContent = '';
+        let isLoadingMedia = false; // Flag per sapere se stiamo caricando media o solo il placeholder
+
         if (state.mediaSource === 'embed' && state.embedCode) {
             newContent = state.embedCode;
+            isLoadingMedia = true;
         } else if (state.mediaSource === 'server') {
             const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
             newContent = `
@@ -1161,22 +1175,59 @@ document.addEventListener('DOMContentLoaded', () => {
                     <video id="ad-video-bg" loop playsinline muted src="${videoUrl}"></video>
                 </div>
                 <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
+            isLoadingMedia = true;
         } else {
-            /* --- MODIFICA 3: Immagine "Pronto" al posto del testo --- */
-            newContent = `<div class="placeholder-content" style="padding: 0; overflow: hidden;">
-                            <img src="https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg" alt="Pronto per contenuti video" style="width: 100%; height: 100%; object-fit: cover;">
+            // Stato "Pronto" (nessun media)
+            newContent = `<div class="placeholder-content padded">
+                            <img src="https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg" alt="Pronto per contenuti video">
                          </div>`;
+            isLoadingMedia = false;
         }
         
+        // Definisce l'HTML per "Carico Attendi"
+        const loadingContent = `<div class="placeholder-content padded">
+                                  <img src="https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg" alt="Caricamento in corso...">
+                                </div>`;
+
+        // 1. Avvia il fade-out del contenuto attuale
         videoPlayerContainer.classList.remove('box-enter-animation');
         videoPlayerContainer.classList.add('box-exit-animation');
         
-        setTimeout(() => {
-            videoPlayerContainer.innerHTML = newContent;
-            videoPlayerContainer.classList.remove('box-exit-animation');
-            videoPlayerContainer.classList.add('box-enter-animation');
-            applyMediaState(state); 
-        }, 500);
+        if (isLoadingMedia) {
+            // --- FLUSSO CON CARICAMENTO MEDIA ---
+            
+            // 2. Dopo il fade-out (500ms), mostra "Carico Attendi" con fade-in
+            setTimeout(() => {
+                videoPlayerContainer.innerHTML = loadingContent;
+                videoPlayerContainer.classList.remove('box-exit-animation');
+                videoPlayerContainer.classList.add('box-enter-animation');
+            }, 500); // Sincronizzato con la fine di box-exit-animation
+
+            // 3. Aspetta un po' (1s) e poi avvia il fade-out di "Carico Attendi"
+            setTimeout(() => {
+                videoPlayerContainer.classList.remove('box-enter-animation');
+                videoPlayerContainer.classList.add('box-exit-animation');
+            }, 1500); // 500ms (fade-in) + 1000ms (visibile)
+
+            // 4. Dopo il fade-out (500ms), mostra il *nuovo media* con fade-in
+            setTimeout(() => {
+                videoPlayerContainer.innerHTML = newContent;
+                videoPlayerContainer.classList.remove('box-exit-animation');
+                videoPlayerContainer.classList.add('box-enter-animation');
+                applyMediaState(state); // Applica stato (play/volume) al nuovo media
+            }, 2000); // 1500ms + 500ms (fade-out)
+
+        } else {
+            // --- FLUSSO SENZA CARICAMENTO (solo "Pronto") ---
+            
+            // 2. Dopo il fade-out (500ms), mostra "Pronto" con fade-in
+            setTimeout(() => {
+                videoPlayerContainer.innerHTML = newContent;
+                videoPlayerContainer.classList.remove('box-exit-animation');
+                videoPlayerContainer.classList.add('box-enter-animation');
+                applyMediaState(state); 
+            }, 500);
+        }
     }
 
     const loaderEl = document.getElementById('loader');
@@ -1306,12 +1357,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     socket.on('connect', () => {
-        // loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati..."; // Testo ora nascosto
+        loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
         socket.emit('request_initial_state');
     });
     socket.on('disconnect', () => {
         loaderEl.classList.remove('hidden');
-        // loaderEl.querySelector('p').textContent = "Connessione persa..."; // Testo ora nascosto
+        loaderEl.querySelector('p').textContent = "Connessione persa...";
     });
     socket.on('initial_state', updateDisplay);
     socket.on('state_updated', updateDisplay);
