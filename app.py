@@ -1568,17 +1568,22 @@ def clear_video():
     current_video_file = {'data': None, 'mimetype': None, 'name': None}
     return jsonify({'success': True})
 
-# --- GESTIONE WEBSOCKET ---
+# -------------------------------------------------------------------
+# !!! INIZIO CODICE CORRETTO !!!
+# GESTIONE WEBSOCKET (CORRETTA)
+# -------------------------------------------------------------------
 
 @socketio.on('connect')
 def handle_connect():
     if not current_user.is_authenticated: return False
     print(f"Client autorizzato connesso: {current_user.name} ({request.sid})")
     global current_app_state # AGGIUNTA PER GESTIRE IL CASO INIZIALE
+    # CORREZIONE: Invia uno stato iniziale (anche vuoto)
     if current_app_state: 
         socketio.emit('initial_state', current_app_state, room=request.sid)
-    # FORZA L'INVIO DI UN MESSAGGIO SE LO STATO È ANCORA NULL
     else:
+        # Questo sblocca il visualizzatore anche se il pannello
+        # non ha mai inviato dati.
         socketio.emit('initial_state', {}, room=request.sid)
 
 @socketio.on('disconnect')
@@ -1596,11 +1601,15 @@ def handle_update_all(data):
 @socketio.on('request_initial_state')
 def handle_request_initial_state():
     if not current_user.is_authenticated: return
+    # CORREZIONE: Invia uno stato iniziale (anche vuoto)
     if current_app_state: 
         socketio.emit('initial_state', current_app_state, room=request.sid)
-    # FORZA L'INVIO DI UN MESSAGGIO SE LO STATO È ANCORA NULL
     else:
         socketio.emit('initial_state', {}, room=request.sid)
+# -------------------------------------------------------------------
+# !!! FINE CODICE CORRETTO !!!
+# -------------------------------------------------------------------
+
 
 # -------------------------------------------------------------------
 # 5. BLOCCO DI ESECUZIONE (Rimosso per il deploy con Gunicorn)
