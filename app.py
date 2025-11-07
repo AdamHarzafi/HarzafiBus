@@ -1585,15 +1585,28 @@ def handle_request_initial_state():
         socketio.emit('initial_state', {}, room=request.sid)
 
 # -------------------------------------------------------------------
-# 5. BLOCCO DI ESECUZIONE
+# 5. BLOCCO DI ESECUZIONE (Rimosso per il deploy con Gunicorn)
 # -------------------------------------------------------------------
 
-if __name__ == '__main__':
-    local_ip = get_local_ip()
-    print("===================================================================")
-    print("   SERVER HARZAFI v10 (FIX FINALE - COMUNICAZIONE STABILE)")
-    print("===================================================================")
-    print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
-    print("Credenziali di default: admin / adminpass")
-    print("===================================================================")
-    socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+# L'applicazione verrà eseguita da Gunicorn utilizzando l'oggetto 'app'.
+# La sezione 'if __name__ == '__main__': ...' è stata rimossa per evitare
+# conflitti in produzione.
+
+# Se vuoi eseguire in locale per test, puoi usare:
+# socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+
+# L'istruzione che segue è solo per dare visibilità all'IP locale
+# in caso di esecuzione manuale in un terminale standard.
+try:
+    if sys.argv[0] == 'app.py' or sys.argv[0].endswith('gunicorn'):
+        local_ip = get_local_ip()
+        print("===================================================================")
+        print("   SERVER HARZAFI v10 (SOLUZIONE DEFINITIVA WEBSOCKET)")
+        print("===================================================================")
+        print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
+        print("Credenziali di default: admin / adminpass")
+        print("===================================================================")
+except:
+    pass
+
+# Fine del file. Gunicorn prenderà l'oggetto 'app'.
