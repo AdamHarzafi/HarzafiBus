@@ -210,7 +210,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (CON ANTEPRIMA RIDIMENSIONATA E INTERATTIVA) ---
+# --- PANNELLO DI CONTROLLO (MODIFICATO CON NUOVO PULSANTE) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -444,6 +444,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                 <a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-secondary">Apri in Schermo Intero</a>
             </div>
         </section>
+        
         <section class="control-section">
             <h2>Gestione Media e Messaggi</h2>
              <p class="subtitle">Carica contenuti video, controlla la riproduzione o imposta messaggi a scorrimento.</p>
@@ -456,7 +457,11 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                     <input type="file" id="video-importer" accept="video/*" style="display: none;">
                     <button id="import-video-btn" class="btn-secondary">Importa Video Locale</button>
                     <p id="media-upload-status" style="font-size: 14px; color: var(--text-secondary); margin-top: 15px;">Nessun media caricato.</p>
+                    
                     <button id="remove-media-btn" class="btn-danger" style="display: none; width: auto; padding: 8px 15px; font-size: 13px;">Rimuovi Media</button>
+                    
+                    <button id="disable-media-btn" class="btn-secondary" style="margin-top: 10px; width: 100%;">DISATTIVARE CONTENUTI VIDEO</button>
+
                  </div>
                  <div>
                      <label for="info-messages-input">Messaggi a scorrimento (uno per riga)</label>
@@ -559,6 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const importEmbedBtn = document.getElementById('import-embed-btn');
     const embedCodeInput = document.getElementById('embed-code-input');
     const removeMediaBtn = document.getElementById('remove-media-btn');
+    const disableMediaBtn = document.getElementById('disable-media-btn'); // Nuovo pulsante
     const mediaUploadStatusText = document.getElementById('media-upload-status');
     const lineSelector = document.getElementById('line-selector');
     const prevBtn = document.getElementById('prev-btn');
@@ -621,6 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Funzione aggiornata per gestire 4 stati (embed, server, disabled, null)
     function loadMediaStatus() {
         const mediaSource = localStorage.getItem('busSystem-mediaSource');
         const videoName = localStorage.getItem('busSystem-videoName');
@@ -630,13 +637,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (mediaSource === 'embed') {
             mediaUploadStatusText.textContent = `Media da Embed attivo.`;
+            removeMediaBtn.textContent = 'Rimuovi Media';
             removeMediaBtn.style.display = 'inline-block';
+            disableMediaBtn.style.display = 'inline-block';
         } else if (mediaSource === 'server' && videoName) {
             mediaUploadStatusText.textContent = `Video locale: ${videoName}`;
+            removeMediaBtn.textContent = 'Rimuovi Media';
             removeMediaBtn.style.display = 'inline-block';
+            disableMediaBtn.style.display = 'inline-block';
+        } else if (mediaSource === 'disabled') {
+            mediaUploadStatusText.textContent = `Contenuti video disattivati.`;
+            removeMediaBtn.textContent = 'Riattiva (pulisci stato)';
+            removeMediaBtn.style.display = 'inline-block';
+            disableMediaBtn.style.display = 'none';
         } else {
             mediaUploadStatusText.textContent = 'Nessun media caricato.';
             removeMediaBtn.style.display = 'none';
+            disableMediaBtn.style.display = 'inline-block';
         }
     }
 
@@ -667,13 +684,34 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
         loadMediaStatus(); embedCodeInput.value = ''; sendFullStateUpdate();
     }
+    
+    // Funzione "Rimuovi" aggiornata (ora è "Pulisci / Riattiva")
     async function removeMedia() {
-        if (!confirm('Rimuovere il media attuale?')) return;
+        const mediaSource = localStorage.getItem('busSystem-mediaSource');
+        const confirmMsg = (mediaSource === 'disabled') ? 
+            'Vuoi riattivare il player? (Questo pulirà lo stato "disattivato")' : 
+            'Rimuovere il media attuale?';
+            
+        if (!confirm(confirmMsg)) return;
+        
         await fetchAuthenticated('/clear-video', { method: 'POST' });
-        localStorage.removeItem('busSystem-mediaSource'); localStorage.removeItem('busSystem-videoName');
+        localStorage.removeItem('busSystem-mediaSource'); // Rimuove 'server', 'embed' o 'disabled'
+        localStorage.removeItem('busSystem-videoName');
         localStorage.removeItem('busSystem-embedCode');
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
         loadMediaStatus(); sendFullStateUpdate();
+    }
+    
+    // Nuova funzione per il pulsante "Disattiva"
+    async function disableMedia() {
+        if (!confirm('Disattivare la riproduzione di tutti i contenuti video? Il player mostrerà un\'immagine "Non disponibile".')) return;
+        await fetchAuthenticated('/clear-video', { method: 'POST' }); // Pulisce il video sul server
+        localStorage.setItem('busSystem-mediaSource', 'disabled'); // Imposta il nuovo stato
+        localStorage.removeItem('busSystem-videoName');
+        localStorage.removeItem('busSystem-embedCode');
+        localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
+        loadMediaStatus();
+        sendFullStateUpdate();
     }
 
     function saveServiceStatus() { localStorage.setItem('busSystem-serviceStatus', serviceStatus); sendFullStateUpdate(); }
@@ -886,6 +924,7 @@ document.addEventListener('DOMContentLoaded', () => {
     videoImporter.addEventListener('change', handleLocalVideoUpload);
     importEmbedBtn.addEventListener('click', handleEmbedImport);
     removeMediaBtn.addEventListener('click', removeMedia);
+    disableMediaBtn.addEventListener('click', disableMedia); // Aggiunto listener
     addNewLineBtn.addEventListener('click', () => { document.getElementById('edit-line-id').value = ''; document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; lineEditorForm.reset(); stopsListContainer.innerHTML = ''; addStopToModal(); modal.showModal(); });
     lineManagementList.addEventListener('click', (e) => {
         const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
@@ -926,7 +965,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO CON LA LOGICA DI CARICAMENTO CORRETTA) ---
+# --- VISUALIZZATORE (MODIFICATO CON TESTO "FUORI SERVIZIO" E STATO "DISABLED") ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -956,7 +995,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             font-size: 1.2em;
         }
         
-        /* --- MODIFICA 1: Loader pagina ripristinato all'originale --- */
+        /* Loader pagina (originale) */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -1029,7 +1068,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         
-        /* --- Overlay "Fuori Servizio" con immagine personalizzata --- */
+        /* --- MODIFICA 3: Stile "Fuori Servizio" ripristinato a TESTO --- */
         #service-offline-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             z-index: 1000; display: flex; align-items: center; justify-content: center; 
@@ -1039,10 +1078,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
-        #service-offline-overlay img {
-             max-width: 90%; max-height: 90%; object-fit: contain; 
-             border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
+        /* Regole CSS per il testo (ripristinate) */
+        #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; margin: 0; text-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        
         @keyframes fadeInBlur { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
         
@@ -1122,7 +1161,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
 
     <div id="service-offline-overlay">
-        <img src="https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg" alt="Servizio non disponibile">
+        <div class="overlay-content">
+            <h2>NESSUN SERVIZIO</h2>
+            <p>AL MOMENTO, IL SISTEMA NON È DISPONIBILE.</p>
+        </div>
     </div>
 
 <script>
@@ -1160,7 +1202,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // --- MODIFICA 2: Logica di caricamento media aggiornata ---
+    // Logica di caricamento media aggiornata per gestire 'disabled'
     function loadMediaOrPlaceholder(state) {
         let newContent = '';
         let isLoadingMedia = false; // Flag per sapere se stiamo caricando media o solo il placeholder
@@ -1176,6 +1218,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
             isLoadingMedia = true;
+        } else if (state.mediaSource === 'disabled') {
+            // Stato "Disattivato" (richiesta 2)
+            newContent = `<div class="placeholder-content padded">
+                            <img src="https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg" alt="Contenuti non disponibili">
+                         </div>`;
+            isLoadingMedia = false;
         } else {
             // Stato "Pronto" (nessun media)
             newContent = `<div class="placeholder-content padded">
@@ -1218,9 +1266,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 2000); // 1500ms + 500ms (fade-out)
 
         } else {
-            // --- FLUSSO SENZA CARICAMENTO (solo "Pronto") ---
+            // --- FLUSSO SENZA CARICAMENTO (per "Pronto" e "Disattivato") ---
             
-            // 2. Dopo il fade-out (500ms), mostra "Pronto" con fade-in
+            // 2. Dopo il fade-out (500ms), mostra "Pronto" o "Disattivato" con fade-in
             setTimeout(() => {
                 videoPlayerContainer.innerHTML = newContent;
                 videoPlayerContainer.classList.remove('box-exit-animation');
