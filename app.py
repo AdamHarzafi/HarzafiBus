@@ -192,7 +192,7 @@ LOGIN_PAGE_HTML = """
                     {{ form.password(id="password", class="form-control", required=True) }}
                     <button type="button" id="password-toggle" title="Mostra/Nascondi password">
                         <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 4C7 4 2.73 7.11 1 11.5 2.73 15.89 7 19 12 19s9.27-3.11 11-7.5C21.27 7.11 17 4 12 4zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49 .2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75.99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67 .24-1.38 .37-2.14 .37-2.76 0-5-2.24-5-5 0-.76 .13-1.47 .37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
+                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49 .2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75 .99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67 .24-1.38 .37-2.14 .37-2.76 0-5-2.24-5-5 0-.76 .13-1.47 .37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
                     </button>
                 </div>
             </div>
@@ -219,7 +219,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (CON ERRORE DOM CORRETTO) ---
+# --- PANNELLO DI CONTROLLO (CON LOGICA 'loadData' CORRETTA) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -617,7 +617,25 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function loadData() { linesData = JSON.parse(localStorage.getItem('busSystem-linesData')) || getDefaultData(); saveData(); }
+    // ===================================================================
+    // !!! INIZIO CODICE CORRETTO !!!
+    // Questa funzione ora controlla se i dati caricati sono vuoti
+    // e, in caso affermativo, carica i dati predefiniti.
+    // ===================================================================
+    function loadData() {
+        let loadedData = JSON.parse(localStorage.getItem('busSystem-linesData'));
+        // SE I DATI MANCANO O SONO UN OGGETTO VUOTO, USA I PREDEFINITI
+        if (!loadedData || Object.keys(loadedData).length === 0) {
+            linesData = getDefaultData();
+        } else {
+            linesData = loadedData;
+        }
+        saveData(); // Salva lo stato (corretto o predefinito)
+    }
+    // ===================================================================
+    // !!! FINE CODICE CORRETTO !!!
+    // ===================================================================
+
     function saveData() { localStorage.setItem('busSystem-linesData', JSON.stringify(linesData)); sendFullStateUpdate(); }
     function loadMessages() {
         const messages = localStorage.getItem('busSystem-infoMessages');
@@ -995,7 +1013,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (CON LOGICA PLAYER CORRETTA) ---
+# --- VISUALIZZATORE (Nessuna modifica necessaria, era corretto) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
