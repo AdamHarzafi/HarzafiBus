@@ -1,3 +1,12 @@
+# -------------------------------------------------------------------
+# !!! CORREZIONE CRITICA PER EVENTLET !!!
+# Eventlet deve eseguire il monkey_patching prima di qualsiasi altro import.
+# Questo risolve l'eccezione che blocca la comunicazione SocketIO.
+# -------------------------------------------------------------------
+import eventlet
+eventlet.monkey_patch()
+# -------------------------------------------------------------------
+
 import sys
 import socket
 from functools import wraps
@@ -962,7 +971,7 @@ document.addEventListener('DOMContentLoaded', () => {
         stopsListContainer.appendChild(stopItem);
     }
     lineEditorForm.addEventListener('submit', (e) => {
-        e.preventDefault(); const originalId = editLineId.value; const newId = lineNameInput.value.trim().toUpperCase(); const direction = lineDirectionInput.value.trim();
+        e.preventDefault(); const originalId = editLineId.value; const newId = lineNameInput.value.trim().toUpperCase(); const direction = lineDirectionInput.value.trim().toUpperCase();
         if (!newId || !direction) { alert('Nome linea e destinazione sono obbligatori.'); return; }
         const stops = Array.from(stopsListContainer.querySelectorAll('.stop-name-input')).map((input, i) => {
             const name = input.value.trim().toUpperCase();
@@ -1547,7 +1556,12 @@ def clear_video():
 def handle_connect():
     if not current_user.is_authenticated: return False
     print(f"Client autorizzato connesso: {current_user.name} ({request.sid})")
-    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
+    global current_app_state # AGGIUNTA PER GESTIRE IL CASO INIZIALE
+    if current_app_state: 
+        socketio.emit('initial_state', current_app_state, room=request.sid)
+    # FORZA L'INVIO DI UN MESSAGGIO SE LO STATO È ANCORA NULL
+    else:
+        socketio.emit('initial_state', {}, room=request.sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -1564,7 +1578,11 @@ def handle_update_all(data):
 @socketio.on('request_initial_state')
 def handle_request_initial_state():
     if not current_user.is_authenticated: return
-    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
+    if current_app_state: 
+        socketio.emit('initial_state', current_app_state, room=request.sid)
+    # FORZA L'INVIO DI UN MESSAGGIO SE LO STATO È ANCORA NULL
+    else:
+        socketio.emit('initial_state', {}, room=request.sid)
 
 # -------------------------------------------------------------------
 # 5. BLOCCO DI ESECUZIONE
@@ -1573,7 +1591,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v10 (Anteprima Ridimensionata e Controllabile)")
+    print("   SERVER HARZAFI v10 (FIX FINALE - COMUNICAZIONE STABILE)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
