@@ -227,7 +227,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (Invariato) ---
+# --- PANNELLO DI CONTROLLO (MODIFICATO) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -376,6 +376,39 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             width: auto;
             flex-shrink: 0;
         }
+        
+        /* === NUOVI STILI PER EDITOR FERMATE === */
+        .stop-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        .stop-inputs { flex-grow: 1; display: flex; gap: 10px; }
+        .stop-inputs input { width: 100%; }
+        .audio-upload-btn {
+            width: 40px !important; /* Sovrascrive .btn */
+            height: 40px;
+            padding: 8px !important;
+            flex-shrink: 0;
+            border-radius: 50% !important;
+            line-height: 1;
+            border: 2px solid;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .audio-upload-btn.status-red {
+            background-color: var(--danger);
+            border-color: rgba(255,255,255,0.3);
+            color: white;
+        }
+        .audio-upload-btn.status-green {
+            background-color: var(--success);
+            border-color: rgba(255,255,255,0.3);
+            color: white;
+        }
+        .audio-upload-btn svg { width: 20px; height: 20px; }
+        .remove-stop-btn {
+            width: 40px !important;
+            height: 40px;
+            padding: 8px !important;
+            flex-shrink: 0;
+        }
+        /* === FINE NUOVI STILI === */
     </style>
 </head>
 <body>
@@ -523,7 +556,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             <div class="control-group"><label for="line-name">Nome Linea</label><input type="text" id="line-name" required></div>
             <div class="control-group"><label for="line-direction">Destinazione</label><input type="text" id="line-direction" required></div>
             <div id="stops-editor">
-                <label>Fermate</label>
+                <label>Fermate (Nome, Sottotitolo, Audio)</label>
                 <div id="stops-list" style="max-height: 250px; overflow-y: auto; padding-right: 10px;"></div>
                 <button type="button" id="add-stop-btn" class="btn-secondary" style="margin-top: 10px; width: 100%;">+ Aggiungi Fermata</button>
             </div>
@@ -623,10 +656,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let linesData = {}, currentLineKey = null, currentStopIndex = 0, serviceStatus = 'online';
     let videoNotAvailable = false;
+    
+    // Icone SVG per i pulsanti audio
+    const iconMicRed = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
+    const iconMicGreen = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
+
 
     function getDefaultData() {
         return {
-            "3": { "direction": "CORSA DEVIATA", "stops": [{ "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL" }, { "name": "PRIMULE", "subtitle": "" }, { "name": "PERVINCHE", "subtitle": "" }, { "name": "SANSOVINO", "subtitle": "" }, { "name": "CINCINNATO", "subtitle": "MERCATO RIONALE" }, { "name": "LOMBARDIA", "subtitle": "FERMATA PIU VICINA PER LA PISCINA LOMBARDIA" }, { "name": "BORSI", "subtitle": "" }, { "name": "LARGO TOSCANA", "subtitle": "" }, { "name": "LARGO BORGARO", "subtitle": "" }, { "name": "PIERO DELLA FRANCESCA", "subtitle": "FERMATA PIU VICINA PER IL MUSEO A COME AMBIENTE" }, { "name": "OSPEDALE AMEDEO DI SAVOIA", "subtitle": "UNIVERSITÀ - DIPARTIMENTO DI INFORMATICA" }, { "name": "TASSONI", "subtitle": "" }, { "name": "AVELLINO", "subtitle": "" }, { "name": "LIVORNO", "subtitle": "" }, { "name": "INDUSTRIA", "subtitle": "" }, { "name": "RONDÒ FORCA OVEST", "subtitle": "MARIA AUSILIATRICE" }, { "name": "OSPEDALE COTTOLENGO", "subtitle": "ANAGRAFE CENTRALE" }, { "name": "PORTA PALAZZO", "subtitle": "PIAZZA DELLA REPBLICA" }, { "name": "PORTA PALAZZO EST", "subtitle": "PIAZZA DELLA REPBLICA" }, { "name": "XI FEBBRAIO", "subtitle": "AUTOSTAZIONE DORA" }, { "name": "GIARDINI REALI", "subtitle": "RONDÒ RIVELLA" }, { "name": "ROSSINI", "subtitle": "MOLE ANTONELLIANA" }, { "name": "CAMPUS EINAUDI", "subtitle": "" }, { "name": "LARGO BERARDI", "subtitle": "" }, { "name": "OSPEDALE GRADENIGO", "subtitle": "" }, { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL" }] }
+            "3": { "direction": "CORSA DEVIATA", "stops": [
+                { "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }, 
+                { "name": "PRIMULE", "subtitle": "", "audio": null }, 
+                { "name": "PERVINCHE", "subtitle": "", "audio": null }, 
+                { "name": "SANSOVINO", "subtitle": "", "audio": null }, 
+                { "name": "CINCINNATO", "subtitle": "MERCATO RIONALE", "audio": null }, 
+                { "name": "LOMBARDIA", "subtitle": "FERMATA PIU VICINA PER LA PISCINA LOMBARDIA", "audio": null }, 
+                { "name": "BORSI", "subtitle": "", "audio": null }, 
+                { "name": "LARGO TOSCANA", "subtitle": "", "audio": null }, 
+                { "name": "LARGO BORGARO", "subtitle": "", "audio": null }, 
+                { "name": "PIERO DELLA FRANCESCA", "subtitle": "FERMATA PIU VICINA PER IL MUSEO A COME AMBIENTE", "audio": null }, 
+                { "name": "OSPEDALE AMEDEO DI SAVOIA", "subtitle": "UNIVERSITÀ - DIPARTIMENTO DI INFORMATICA", "audio": null }, 
+                { "name": "TASSONI", "subtitle": "", "audio": null }, 
+                { "name": "AVELLINO", "subtitle": "", "audio": null }, 
+                { "name": "LIVORNO", "subtitle": "", "audio": null }, 
+                { "name": "INDUSTRIA", "subtitle": "", "audio": null }, 
+                { "name": "RONDÒ FORCA OVEST", "subtitle": "MARIA AUSILIATRICE", "audio": null }, 
+                { "name": "OSPEDALE COTTOLENGO", "subtitle": "ANAGRAFE CENTRALE", "audio": null }, 
+                { "name": "PORTA PALAZZO", "subtitle": "PIAZZA DELLA REPBLICA", "audio": null }, 
+                { "name": "PORTA PALAZZO EST", "subtitle": "PIAZZA DELLA REPBLICA", "audio": null }, 
+                { "name": "XI FEBBRAIO", "subtitle": "AUTOSTAZIONE DORA", "audio": null }, 
+                { "name": "GIARDINI REALI", "subtitle": "RONDÒ RIVELLA", "audio": null }, 
+                { "name": "ROSSINI", "subtitle": "MOLE ANTONELLIANA", "audio": null }, 
+                { "name": "CAMPUS EINAUDI", "subtitle": "", "audio": null }, 
+                { "name": "LARGO BERARDI", "subtitle": "", "audio": null }, 
+                { "name": "OSPEDALE GRADENIGO", "subtitle": "", "audio": null }, 
+                { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }
+            ]}
         };
     }
 
@@ -840,9 +905,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoInIframe = iframeDoc.getElementById('ad-video');
                 const announcementAudio = iframeDoc.getElementById('announcement-sound');
                 const bookedAudio = iframeDoc.getElementById('booked-sound-viewer');
-
+                
+                // Muto tutti gli audio nell'anteprima
                 if (announcementAudio) announcementAudio.muted = true;
                 if (bookedAudio) bookedAudio.muted = true;
+                const stopAudio = iframeDoc.getElementById('stop-announcement-sound');
+                if (stopAudio) stopAudio.muted = true;
                 
                 if (videoInIframe) {
                     videoInIframe.muted = true;
@@ -939,34 +1007,143 @@ document.addEventListener('DOMContentLoaded', () => {
     videoImporter.addEventListener('change', handleLocalVideoUpload);
     importEmbedBtn.addEventListener('click', handleEmbedImport);
     removeMediaBtn.addEventListener('click', removeMedia);
-    addNewLineBtn.addEventListener('click', () => { document.getElementById('edit-line-id').value = ''; document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; lineEditorForm.reset(); stopsListContainer.innerHTML = ''; addStopToModal(); modal.showModal(); });
+    addNewLineBtn.addEventListener('click', () => { 
+        document.getElementById('edit-line-id').value = ''; 
+        document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; 
+        lineEditorForm.reset(); 
+        stopsListContainer.innerHTML = ''; 
+        addStopToModal(); 
+        modal.showModal(); 
+    });
+    
     lineManagementList.addEventListener('click', (e) => {
         const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
         if (target.classList.contains('edit-btn')) {
             editLineId.value = lineId; document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; const line = linesData[lineId];
-            lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; (line.stops || []).forEach(s => addStopToModal(s)); modal.showModal();
-        } if (target.classList.contains('delete-btn')) { if (confirm(`Eliminare la linea "${lineId}"?`)) { delete linesData[lineId]; saveData(); renderAll(); } }
+            lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; 
+            (line.stops || []).forEach(s => addStopToModal(s)); 
+            modal.showModal();
+        } if (target.classList.contains('delete-btn')) { 
+            if (confirm(`Eliminare la linea "${lineId}"?`)) { 
+                delete linesData[lineId]; 
+                saveData(); 
+                renderAll(); 
+            } 
+        }
     });
+    
     addStopBtn.addEventListener('click', () => addStopToModal());
-    stopsListContainer.addEventListener('click', (e) => { if (e.target.classList.contains('remove-stop-btn')) { if (stopsListContainer.children.length > 1) e.target.parentElement.remove(); else alert('Ogni linea deve avere almeno una fermata.'); } });
-    function addStopToModal(stop = { name: '', subtitle: '' }) {
-        const stopItem = document.createElement('div'); stopItem.style.display='flex'; stopItem.style.gap='10px'; stopItem.style.marginBottom='10px';
-        stopItem.innerHTML = `<input type="text" placeholder="Nome fermata" class="stop-name-input" value="${stop.name || ''}" required style="flex-grow:1;"><input type="text" placeholder="Sottotitolo (opz.)" class="stop-subtitle-input" value="${stop.subtitle || ''}" style="flex-grow:1;"><button type="button" class="btn-danger remove-stop-btn" style="width:auto; padding: 10px 12px;">-</button>`;
+    
+    // === NUOVO GESTORE EVENTI PER IL MODAL FERMATE (Upload e Rimozione) ===
+    stopsListContainer.addEventListener('click', (e) => {
+        const audioBtn = e.target.closest('.audio-upload-btn');
+        const removeBtn = e.target.closest('.remove-stop-btn');
+        
+        if (audioBtn) {
+            // Cliccato bottone audio: triggera il file input nascosto
+            const stopItem = audioBtn.closest('.stop-item');
+            stopItem.querySelector('.stop-audio-input').click();
+        }
+        
+        if (removeBtn) {
+            // Cliccato bottone rimuovi
+            if (stopsListContainer.children.length > 1) {
+                removeBtn.closest('.stop-item').remove();
+            } else {
+                alert('Ogni linea deve avere almeno una fermata.');
+            }
+        }
+    });
+
+    // === NUOVO GESTORE EVENTI PER IL CARICAMENTO FILE AUDIO ===
+    stopsListContainer.addEventListener('change', (e) => {
+        if (e.target.classList.contains('stop-audio-input')) {
+            const file = e.target.files[0];
+            const stopItem = e.target.closest('.stop-item');
+            const audioBtn = stopItem.querySelector('.audio-upload-btn');
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const base64Audio = event.target.result;
+                    stopItem.dataset.audioData = base64Audio; // Salva Base64
+                    audioBtn.classList.remove('status-red');
+                    audioBtn.classList.add('status-green');
+                    audioBtn.innerHTML = iconMicGreen;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+    });
+    
+    // === NUOVA FUNZIONE per aggiungere fermate (con audio) ===
+    function addStopToModal(stop = { name: '', subtitle: '', audio: null }) {
+        const stopItem = document.createElement('div');
+        stopItem.className = 'stop-item';
+        
+        const audioData = stop.audio || null;
+        const audioStatus = audioData ? 'green' : 'red';
+        
+        stopItem.innerHTML = `
+            <input type="file" class="stop-audio-input" accept="audio/mpeg,audio/mp3" style="display: none;">
+            <button type="button" class="audio-upload-btn status-${audioStatus}" title="Carica/Modifica audio fermata">
+                ${audioStatus === 'green' ? iconMicGreen : iconMicRed}
+            </button>
+            <div class="stop-inputs">
+                <input type="text" placeholder="Nome fermata" class="stop-name-input" value="${stop.name || ''}" required>
+                <input type="text" placeholder="Sottotitolo (opz.)" class="stop-subtitle-input" value="${stop.subtitle || ''}">
+            </div>
+            <button type="button" class="btn-danger remove-stop-btn" title="Rimuovi fermata">-</button>
+        `;
+        
+        // Salva il dato audio (Base64) sul div principale
+        if (audioData) {
+            stopItem.dataset.audioData = audioData;
+        }
+        
         stopsListContainer.appendChild(stopItem);
     }
+    
+    // === MODIFICATO GESTORE SUBMIT FORM (per salvare audio) ===
     lineEditorForm.addEventListener('submit', (e) => {
-        e.preventDefault(); const originalId = editLineId.value; const newId = lineNameInput.value.trim().toUpperCase(); const direction = lineDirectionInput.value.trim();
-        if (!newId || !direction) { alert('Nome linea e destinazione sono obbligatori.'); return; }
-        const stops = Array.from(stopsListContainer.querySelectorAll('.stop-name-input')).map((input, i) => {
-            const name = input.value.trim().toUpperCase();
-            const subtitle = stopsListContainer.querySelectorAll('.stop-subtitle-input')[i].value.trim().toUpperCase();
-            return { name, subtitle };
+        e.preventDefault(); 
+        const originalId = editLineId.value; 
+        const newId = lineNameInput.value.trim().toUpperCase(); 
+        const direction = lineDirectionInput.value.trim();
+        
+        if (!newId || !direction) { 
+            alert('Nome linea e destinazione sono obbligatori.'); 
+            return; 
+        }
+        
+        const stops = Array.from(stopsListContainer.querySelectorAll('.stop-item')).map(item => {
+            const name = item.querySelector('.stop-name-input').value.trim().toUpperCase();
+            const subtitle = item.querySelector('.stop-subtitle-input').value.trim().toUpperCase();
+            const audio = item.dataset.audioData || null; // Recupera Base64
+            return { name, subtitle, audio }; // Nuovo formato
         }).filter(s => s.name);
-        if (stops.length === 0) { alert('Aggiungere almeno una fermata con un nome.'); return; }
-        if (originalId && originalId !== newId) delete linesData[originalId]; linesData[newId] = { direction, stops }; saveData();
-        if (currentLineKey === originalId) { currentLineKey = newId; localStorage.setItem('busSystem-currentLine', newId); }
-        renderAll(); updateAndRenderStatus(); modal.close();
+        
+        if (stops.length === 0) { 
+            alert('Aggiungere almeno una fermata con un nome.'); 
+            return; 
+        }
+        
+        if (originalId && originalId !== newId) {
+            delete linesData[originalId]; 
+        }
+        linesData[newId] = { direction, stops }; 
+        saveData();
+        
+        if (currentLineKey === originalId) { 
+            currentLineKey = newId; 
+            localStorage.setItem('busSystem-currentLine', newId); 
+        }
+        
+        renderAll(); 
+        updateAndRenderStatus(); 
+        modal.close();
     });
+    
     saveMessagesBtn.addEventListener('click', () => saveMessages(true));
     const cancelBtn = document.getElementById('cancel-btn');
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.close(); });
@@ -979,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (CON LOGICA CORRETTA PER DISATTIVAZIONE TOGGLE) ---
+# --- VISUALIZZATORE (MODIFICATO) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1083,7 +1260,9 @@ VISUALIZZATORE_COMPLETO_HTML = """
         
         #video-player-container {
             width: 100%; max-width: 100%; background-color: transparent;
-            border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            /* === MODIFICA: Bordi più arrotondati === */
+            border-radius: 40px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
             position: relative;
         }
@@ -1096,12 +1275,15 @@ VISUALIZZATORE_COMPLETO_HTML = """
             filter: blur(25px) brightness(0.7);
             z-index: 1;
         }
-        #video-player-container iframe { border-radius: 25px; z-index: 2; }
+        /* === MODIFICA: Bordi più arrotondati === */
+        #video-player-container iframe { border-radius: 40px; z-index: 2; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         
         .placeholder-image {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover; z-index: 2; border-radius: 25px;
+            object-fit: cover; z-index: 2; 
+            /* === MODIFICA: Bordi più arrotondati === */
+            border-radius: 40px;
         }
         
         .video-background-blur {
@@ -1121,6 +1303,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
 </head>
 <body>
     <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
+    <audio id="stop-announcement-sound" preload="auto" style="display:none;"></audio>
     <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
 
     <div id="loader">
@@ -1159,6 +1342,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
     const announcementSound = document.getElementById('announcement-sound');
+    const stopAnnouncementSound = document.getElementById('stop-announcement-sound'); // Nuovo selettore
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
 
     const IMG_DEFAULT = 'https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg';
@@ -1288,6 +1472,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopIndicatorEl = document.getElementById('stop-indicator');
     const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
+    // Funzione per audio LINEA (manuale)
     function playAnnouncement() {
         const videoEl = document.getElementById('ad-video');
         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
@@ -1335,9 +1520,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     /**
-     * =========================================================
-     * FUNZIONE updateDisplay (CON LOGICA DI DISATTIVAZIONE)
-     * =========================================================
+     * =============================================
+     * FUNZIONE updateDisplay (CON LOGICA AUDIO STOP)
+     * =============================================
      */
     function updateDisplay(state) {
         if (!checkServiceStatus(state) || !state.linesData) {
@@ -1369,7 +1554,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 stopIndicatorEl.className = 'current-stop-indicator exit';
                 stopNameEl.className = 'exit';
                 setTimeout(() => {
-                    updateContent();
+                    updateContent(); // Aggiorna il testo
+
+                    // === NUOVA LOGICA AUDIO STOP (automatico) ===
+                    const newStop = line.stops[state.currentStopIndex]; // Prendi il *nuovo* stop
+                    if (newStop && newStop.audio) {
+                        stopAnnouncementSound.src = newStop.audio;
+                        stopAnnouncementSound.currentTime = 0;
+                        
+                        const videoEl = document.getElementById('ad-video');
+                        const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
+                        if (videoEl && !videoEl.muted) {
+                            videoEl.volume = Math.min(originalVolume, 0.15);
+                        }
+                        
+                        stopAnnouncementSound.play().catch(e => console.error("Errore riproduzione audio fermata:", e));
+                        
+                        stopAnnouncementSound.onended = () => {
+                            if (videoEl) videoEl.volume = originalVolume;
+                        };
+                    }
+                    // === FINE NUOVA LOGICA AUDIO STOP ===
+
                     stopIndicatorEl.classList.remove('exit');
                     stopNameEl.classList.remove('exit');
                     const enterClass = (direction === 'prev') ? 'enter-reverse' : 'enter';
@@ -1381,14 +1587,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }, 500);
                 }, 400);
             } else {
-                updateContent();
+                updateContent(); // Caricamento iniziale, nessun audio
             }
         }
 
+        // Annuncio LINEA (manuale)
         if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
             playAnnouncement();
         }
 
+        // Audio PRENOTAZIONE
         if (state.stopRequested && state.stopRequested.timestamp > (lastKnownState.stopRequested?.timestamp || 0)) {
             if (bookedSoundViewer) {
                 bookedSoundViewer.currentTime = 0;
@@ -1396,7 +1604,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // === MODIFICA: Logica di Gestione Media Corretta ===
+        // === LOGICA GESTIONE MEDIA (con correzione toggle) ===
         const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
         const notAvailableChanged = state.videoNotAvailable !== lastKnownState.videoNotAvailable;
         const playbackChanged = state.playbackState !== lastKnownState.playbackState ||
@@ -1425,7 +1633,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     targetMediaState = 'default';
                 }
             } else if (notAvailableChanged) {
-                 // <<< === LA CORREZIONE È QUI === >>>
+                 // <<< === QUESTA È LA CORREZIONE === >>>
                  // Il media non è cambiato, ma il toggle "non disponibile" è stato APPENA SPENTO.
                  // Dobbiamo forzare un ricaricamento dello stato corretto (video o default).
                  if (state.mediaSource) {
@@ -1438,13 +1646,11 @@ document.addEventListener('DOMContentLoaded', () => {
                  applyMediaPlaybackState(state);
             }
         }
-
-        // Esegui loadMedia SOLO se abbiamo definito un nuovo stato (targetMediaState non è vuoto)
-        // E se questo nuovo stato è diverso da quello attualmente mostrato
+        
         if (targetMediaState && targetMediaState !== currentMediaState) {
             loadMedia(targetMediaState, state);
         }
-        // === FINE MODIFICA ===
+        // === FINE LOGICA MEDIA ===
         
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
@@ -1606,7 +1812,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v14 (Logica Toggle 'Non Disponibile' Corretta)")
+    print("   SERVER HARZAFI v15 (Audio per Fermata e Bordi Stondati)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
