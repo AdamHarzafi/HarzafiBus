@@ -85,8 +85,26 @@ def get_local_ip():
 # -------------------------------------------------------------------
 # 2. STATO GLOBALE DELL'APPLICAZIONE
 # -------------------------------------------------------------------
-current_app_state = None
+# === MODIFICA: Aggiunto stato predefinito per evitare schermata vuota ===
+current_app_state = {
+    "linesData": {},
+    "currentLineKey": None,
+    "currentStopIndex": 0,
+    "mediaSource": None,
+    "embedCode": None,
+    "videoName": None,
+    "mediaLastUpdated": None,
+    "volumeLevel": "1.0",
+    "playbackState": "playing",
+    "seekAction": None,
+    "infoMessages": [],
+    "serviceStatus": "online", # Default 'online'
+    "videoNotAvailable": False, # Default 'false'
+    "announcement": None,
+    "stopRequested": None
+}
 current_video_file = {'data': None, 'mimetype': None, 'name': None}
+# === FINE MODIFICA ===
 
 # -------------------------------------------------------------------
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
@@ -847,7 +865,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     togglePlaybackBtn.disabled = false;
                     updateButtonState();
                 } else {
-                    throw new Error("Elemento video non trovato.");
+                    // Non lanciare errore se è solo un placeholder
+                    if (iframeDoc.querySelector('.placeholder-image')) {
+                        // È un placeholder, disabilita il pulsante
+                        togglePlaybackBtn.disabled = true;
+                        togglePlaybackBtn.textContent = 'Nessun video da riprodurre';
+                    }
                 }
 
             } catch (e) {
@@ -875,18 +898,21 @@ document.addEventListener('DOMContentLoaded', () => {
         loadData();
         loadMessages();
         
-        serviceStatus = 'online'; // Default
-        saveServiceStatus();
+        // Carica lo stato salvato o usa i default
+        serviceStatus = localStorage.getItem('busSystem-serviceStatus') || 'online';
+        saveServiceStatus(); // Salva (per assicurarsi che sia nel localStorage)
         renderServiceStatus();
         
         // NUOVA INIZIALIZZAZIONE TOGGLE
         videoNotAvailable = localStorage.getItem('busSystem-videoNotAvailable') === 'true';
+        saveVideoNotAvailableStatus(); // Salva
         renderVideoNotAvailableStatus();
         
         currentLineKey = localStorage.getItem('busSystem-currentLine');
         currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex'), 10) || 0;
+        
         renderAll();
-        updateAndRenderStatus();
+        updateAndRenderStatus(); // Questo invierà lo stato completo al server
     }
     
     lineSelector.addEventListener('change', (e) => { currentLineKey = e.target.value; currentStopIndex = 0; updateAndRenderStatus(); });
@@ -969,7 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (CON LOGICA PLACEHOLDER AVANZATA) ---
+# --- VISUALIZZATORE (CON LOGICA PLACEHOLDER AVANZATA E VECCHIE ANIMAZIONI) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1076,13 +1102,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
             position: relative;
-            /* MODIFICATO: animazione gestita da JS */
-            opacity: 0;
-            transition: opacity 0.4s ease-in-out;
-        }
-        /* NUOVA CLASSE PER GESTIRE IL FADE-IN */
-        #video-player-container.content-visible {
-            opacity: 1;
+            /* MODIFICA: Rimossa opacity e transition, ora gestite dalle animazioni */
         }
         
         #video-player-container::before {
@@ -1111,8 +1131,12 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #ad-video-bg { object-fit: cover; }
         #ad-video { object-fit: contain; z-index: 4; }
         
-        /* ANIMAZIONI DI INGRESSO/USCITA RIMOSSE - gestite da opacity */
-        
+        /* === MODIFICA: ANIMAZIONI RIPRISTINATE === */
+        .box-enter-animation { animation: box-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+        /* === FINE MODIFICA === */
     </style>
 </head>
 <body>
@@ -1199,17 +1223,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Mostra il contenuto (video, embed, placeholder) con animazione di dissolvenza.
+     * === MODIFICA: Funzione ripristinata per usare le animazioni 'box' ===
+     * Mostra il contenuto (video, embed, placeholder) con animazione box.
      */
     function showMediaContent(html, stateToApply) {
         if (mediaTimeout) clearTimeout(mediaTimeout); // Cancella timeout precedenti
         
-        videoPlayerContainer.classList.remove('content-visible'); // Fade out
+        videoPlayerContainer.classList.remove('box-enter-animation');
+        videoPlayerContainer.classList.add('box-exit-animation');
         
         setTimeout(() => {
             videoPlayerContainer.innerHTML = html;
-            videoPlayerContainer.classList.add('content-visible'); // Fade in
+            videoPlayerContainer.classList.remove('box-exit-animation');
+            videoPlayerContainer.classList.add('box-enter-animation');
             
+            // Logica per applicare stato e gestire errori
             const videoEl = document.getElementById('ad-video');
             if (videoEl) {
                 // Applica stato playback *dopo* che il video è pronto
@@ -1224,13 +1252,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Per gli embed, non possiamo aspettare 'oncanplay' in modo affidabile
                 applyMediaPlaybackState(stateToApply);
             }
-        }, 400); // Durata della transizione CSS (opacity 0.4s)
+        }, 600); // Durata della transizione CSS (animation 0.6s)
     }
+    // === FINE MODIFICA ===
 
     /**
      * Logica principale per decidere quale contenuto mostrare.
      */
     function loadMedia(targetState, state) {
+        // Non fare nulla se lo stato è già quello (tranne per 'loading' che è un trigger)
+        if (currentMediaState === targetState && targetState !== 'loading') {
+            return;
+        }
+
         currentMediaState = targetState;
         let contentHtml = '';
 
@@ -1352,17 +1386,17 @@ document.addEventListener('DOMContentLoaded', () => {
     
     /**
      * =============================================
-     * FUNZIONE updateDisplay (COMPLETAMENTE RIFATTA)
+     * FUNZIONE updateDisplay (Logica invariata)
      * =============================================
      */
     function updateDisplay(state) {
-        if (!checkServiceStatus(state) || !state.linesData || !state.currentLineKey) {
+        if (!checkServiceStatus(state) || !state.linesData) {
             // Se il servizio è offline o i dati non sono pronti, non fare nulla
             // (checkServiceStatus gestisce già l'overlay)
             return;
         }
 
-        const isInitialLoad = !lastKnownState.currentLineKey;
+        const isInitialLoad = !lastKnownState.currentLineKey && state.currentLineKey;
         
         // 1. Mostra UI principale (logo, testo, etc.)
         loaderEl.classList.add('hidden');
@@ -1371,37 +1405,39 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 2. Aggiorna informazioni Linea e Fermata
         const line = state.linesData[state.currentLineKey];
-        if (!line) return;
-        const stop = line.stops[state.currentStopIndex];
-        const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
-        const stopIndexChanged = lastKnownState.currentStopIndex !== state.currentStopIndex;
+        // Se non c'è linea, non possiamo aggiornare il testo, ma il media sì
+        if (line) {
+            const stop = line.stops[state.currentStopIndex];
+            const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
+            const stopIndexChanged = lastKnownState.currentStopIndex !== state.currentStopIndex;
 
-        const updateContent = () => {
-            lineIdEl.textContent = state.currentLineKey;
-            directionNameEl.textContent = line.direction;
-            stopNameEl.textContent = stop ? stop.name : 'CAPOLINEA';
-            stopSubtitleEl.textContent = stop ? (stop.subtitle || '') : '';
-            adjustFontSize(stopNameEl);
-        };
+            const updateContent = () => {
+                lineIdEl.textContent = state.currentLineKey;
+                directionNameEl.textContent = line.direction;
+                stopNameEl.textContent = stop ? stop.name : 'CAPOLINEA';
+                stopSubtitleEl.textContent = stop ? (stop.subtitle || '') : '';
+                adjustFontSize(stopNameEl);
+            };
 
-        if (!isInitialLoad && (lineChanged || stopIndexChanged)) {
-            const direction = (!isInitialLoad && stopIndexChanged && state.currentStopIndex < lastKnownState.currentStopIndex) ? 'prev' : 'next';
-            stopIndicatorEl.className = 'current-stop-indicator exit';
-            stopNameEl.className = 'exit';
-            setTimeout(() => {
-                updateContent();
-                stopIndicatorEl.classList.remove('exit');
-                stopNameEl.classList.remove('exit');
-                const enterClass = (direction === 'prev') ? 'enter-reverse' : 'enter';
-                stopIndicatorEl.classList.add(enterClass);
-                stopNameEl.classList.add('enter');
+            if (!isInitialLoad && (lineChanged || stopIndexChanged)) {
+                const direction = (stopIndexChanged && state.currentStopIndex < lastKnownState.currentStopIndex) ? 'prev' : 'next';
+                stopIndicatorEl.className = 'current-stop-indicator exit';
+                stopNameEl.className = 'exit';
                 setTimeout(() => {
-                    stopIndicatorEl.classList.remove('enter', 'enter-reverse');
-                    stopNameEl.classList.remove('enter');
-                }, 500);
-            }, 400);
-        } else {
-            updateContent();
+                    updateContent();
+                    stopIndicatorEl.classList.remove('exit');
+                    stopNameEl.classList.remove('exit');
+                    const enterClass = (direction === 'prev') ? 'enter-reverse' : 'enter';
+                    stopIndicatorEl.classList.add(enterClass);
+                    stopNameEl.classList.add('enter');
+                    setTimeout(() => {
+                        stopIndicatorEl.classList.remove('enter', 'enter-reverse');
+                        stopNameEl.classList.remove('enter');
+                    }, 500);
+                }, 400);
+            } else {
+                updateContent();
+            }
         }
 
         // 3. Gestisci Annunci e Prenotazioni
@@ -1427,27 +1463,25 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (state.videoNotAvailable) {
             targetMediaState = 'not_available';
-        } else if (mediaChanged || (isInitialLoad && state.mediaSource)) {
-            // Se il media cambia, O è il caricamento iniziale e C'È un media, mostra loading
+        } else if (mediaChanged) {
+            // Se il media è cambiato, mostra loading
             targetMediaState = 'loading';
-        } else if (isInitialLoad && !state.mediaSource) {
-            // Se è il caricamento iniziale e NON c'è media, vai al default
-            targetMediaState = 'default';
-        } else if (state.mediaSource === 'server') {
-            targetMediaState = 'server';
-        } else if (state.mediaSource === 'embed') {
-            targetMediaState = 'embed';
-        } else {
-            targetMediaState = 'default'; // Fallback (nessun media)
+        } else if (currentMediaState === null) {
+            // Se è il caricamento iniziale (currentMediaState è null)
+            if (state.mediaSource) targetMediaState = 'loading'; // C'è un media, vai in loading
+            else targetMediaState = 'default'; // Non c'è media, vai al default
+        }
+        else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
+            // Se è cambiato solo il playback, applicalo
+             applyMediaPlaybackState(state);
+        } else if (!state.mediaSource && !state.videoNotAvailable && currentMediaState !== 'default') {
+             // Se il media è stato rimosso (no source) e non è 'not available', torna a default
+             targetMediaState = 'default';
         }
 
         // Se lo stato target è diverso, ricarica il contenuto
-        if (targetMediaState !== currentMediaState || mediaChanged || notAvailableChanged) {
+        if (targetMediaState && targetMediaState !== currentMediaState) {
             loadMedia(targetMediaState, state);
-        } 
-        // Se lo stato è lo stesso (server o embed), ma è cambiato solo il playback (play/volume/seek)
-        else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
-            applyMediaPlaybackState(state);
         }
         
         lastKnownState = JSON.parse(JSON.stringify(state));
@@ -1584,7 +1618,9 @@ def clear_video():
 def handle_connect():
     if not current_user.is_authenticated: return False
     print(f"Client autorizzato connesso: {current_user.name} ({request.sid})")
-    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
+    # Invia immediatamente lo stato attuale (che ora ha un default)
+    if current_app_state: 
+        socketio.emit('initial_state', current_app_state, room=request.sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -1596,12 +1632,15 @@ def handle_update_all(data):
     global current_app_state
     if current_app_state is None: current_app_state = {}
     current_app_state.update(data)
+    # Invia 'state_updated' a tutti gli altri
     socketio.emit('state_updated', current_app_state, skip_sid=request.sid)
 
 @socketio.on('request_initial_state')
 def handle_request_initial_state():
     if not current_user.is_authenticated: return
-    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
+    # (Questa è una fallback, 'connect' ora dovrebbe bastare)
+    if current_app_state: 
+        socketio.emit('initial_state', current_app_state, room=request.sid)
 
 # -------------------------------------------------------------------
 # 5. BLOCCO DI ESECUZIONE
@@ -1610,14 +1649,11 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v11 (Gestione Placeholder Video Avanzata)")
+    print("   SERVER HARZAFI v12 (Stato Default e Animazioni Ripristinate)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
     print("===================================================================")
-    # NOTA: Se usi gunicorn + eventlet, questo blocco non viene eseguito.
-    # Per lo sviluppo locale, 'allow_unsafe_werkzeug=True' è ok.
-    # In produzione con gunicorn, non è necessario.
     try:
         socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
     except ImportError:
