@@ -85,7 +85,7 @@ def get_local_ip():
 # -------------------------------------------------------------------
 # 2. STATO GLOBALE DELL'APPLICAZIONE
 # -------------------------------------------------------------------
-# === MODIFICA: Aggiunto stato predefinito per evitare schermata vuota ===
+# Stato predefinito per evitare schermata vuota all'avvio
 current_app_state = {
     "linesData": {},
     "currentLineKey": None,
@@ -104,7 +104,6 @@ current_app_state = {
     "stopRequested": None
 }
 current_video_file = {'data': None, 'mimetype': None, 'name': None}
-# === FINE MODIFICA ===
 
 # -------------------------------------------------------------------
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
@@ -228,7 +227,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (CON ANTEPRIMA RIDIMENSIONATA E INTERATTIVA) ---
+# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (Invariato) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -345,10 +344,9 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--text-primary); border-radius: 50%; border: none; }
         #media-controls-container.disabled { opacity: 0.4; pointer-events: none; }
 
-        /* NUOVO CSS PER L'ANTEPRIMA RIDIMENSIONATA E INTERATTIVA */
         .preview-wrapper {
-            max-width: 720px; /* Imposta una larghezza massima per rimpicciolire */
-            margin: 0 auto 20px auto; /* Centra l'anteprima e aggiunge spazio sotto */
+            max-width: 720px;
+            margin: 0 auto 20px auto;
         }
         .viewer-preview-container {
             position: relative;
@@ -504,7 +502,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                     </div>
                     <p style="font-size: 13px; color: var(--text-secondary); margin-top: 10px;">Forza la visualizzazione di un'immagine "non disponibile" sul viewer.</p>
                  </div>
-                 </div>
+             </div>
         </section>
 
         <section class="control-section">
@@ -573,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
             seekAction: JSON.parse(localStorage.getItem('busSystem-seekAction') || 'null'),
             infoMessages: JSON.parse(localStorage.getItem('busSystem-infoMessages') || '[]'),
             serviceStatus: serviceStatus,
-            videoNotAvailable: videoNotAvailable, // NUOVO STATO
+            videoNotAvailable: videoNotAvailable,
             announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null'),
             stopRequested: JSON.parse(localStorage.getItem('busSystem-stopRequested') || 'null')
         };
@@ -614,12 +612,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceStatusText = document.getElementById('service-status-text');
     const resetDataBtn = document.getElementById('reset-data-btn');
     const bookedBtn = document.getElementById('booked-btn');
-
-    // NUOVI SELETTORI PER TOGGLE "NON DISPONIBILE"
     const videoNotAvailableToggle = document.getElementById('video-not-available-toggle');
     const videoNotAvailableStatusText = document.getElementById('video-not-available-status-text');
-
-    // Media Controls
     const mediaControlsContainer = document.getElementById('media-controls-container');
     const playPauseBtn = document.getElementById('play-pause-btn');
     const volumeSlider = document.getElementById('volume-slider');
@@ -628,7 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const seekFwdBtn = document.getElementById('seek-fwd-btn');
 
     let linesData = {}, currentLineKey = null, currentStopIndex = 0, serviceStatus = 'online';
-    let videoNotAvailable = false; // NUOVO STATO GLOBALE
+    let videoNotAvailable = false;
 
     function getDefaultData() {
         return {
@@ -718,7 +712,6 @@ document.addEventListener('DOMContentLoaded', () => {
         serviceStatusToggle.checked = isOnline;
     }
 
-    // --- NUOVE FUNZIONI PER TOGGLE "NON DISPONIBILE" ---
     function saveVideoNotAvailableStatus() {
         localStorage.setItem('busSystem-videoNotAvailable', videoNotAvailable);
         sendFullStateUpdate();
@@ -729,8 +722,6 @@ document.addEventListener('DOMContentLoaded', () => {
         videoNotAvailableStatusText.style.color = isNotAvailable ? 'var(--danger)' : 'var(--text-primary)';
         videoNotAvailableToggle.checked = isNotAvailable;
     }
-    // --- FINE NUOVE FUNZIONI ---
-
 
     function renderAll() { renderNavigationPanel(); renderManagementPanel(); renderStatusDisplay(); }
     function renderNavigationPanel() {
@@ -788,7 +779,6 @@ document.addEventListener('DOMContentLoaded', () => {
         sendFullStateUpdate();
     }
     
-    // --- Media Controls Logic ---
     function setupMediaControls() {
         const initialVolume = localStorage.getItem('busSystem-volumeLevel') || '1.0';
         const initialPlaybackState = localStorage.getItem('busSystem-playbackState') || 'playing';
@@ -829,7 +819,6 @@ document.addEventListener('DOMContentLoaded', () => {
         else { volumeIcon.textContent = '🔊'; }
     }
     
-    // --- NUOVA LOGICA PER CONTROLLO ANTEPRIMA ---
     function setupPreviewControls() {
         const previewIframe = document.getElementById('viewer-iframe-preview');
         const togglePlaybackBtn = document.getElementById('toggle-preview-playback-btn');
@@ -865,9 +854,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     togglePlaybackBtn.disabled = false;
                     updateButtonState();
                 } else {
-                    // Non lanciare errore se è solo un placeholder
                     if (iframeDoc.querySelector('.placeholder-image')) {
-                        // È un placeholder, disabilita il pulsante
                         togglePlaybackBtn.disabled = true;
                         togglePlaybackBtn.textContent = 'Nessun video da riprodurre';
                     }
@@ -898,21 +885,19 @@ document.addEventListener('DOMContentLoaded', () => {
         loadData();
         loadMessages();
         
-        // Carica lo stato salvato o usa i default
         serviceStatus = localStorage.getItem('busSystem-serviceStatus') || 'online';
-        saveServiceStatus(); // Salva (per assicurarsi che sia nel localStorage)
+        saveServiceStatus();
         renderServiceStatus();
         
-        // NUOVA INIZIALIZZAZIONE TOGGLE
         videoNotAvailable = localStorage.getItem('busSystem-videoNotAvailable') === 'true';
-        saveVideoNotAvailableStatus(); // Salva
+        saveVideoNotAvailableStatus();
         renderVideoNotAvailableStatus();
         
         currentLineKey = localStorage.getItem('busSystem-currentLine');
         currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex'), 10) || 0;
         
         renderAll();
-        updateAndRenderStatus(); // Questo invierà lo stato completo al server
+        updateAndRenderStatus();
     }
     
     lineSelector.addEventListener('change', (e) => { currentLineKey = e.target.value; currentStopIndex = 0; updateAndRenderStatus(); });
@@ -927,7 +912,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
     
-    // NUOVO EVENT LISTENER
     videoNotAvailableToggle.addEventListener('change', () => {
         videoNotAvailable = videoNotAvailableToggle.checked;
         saveVideoNotAvailableStatus();
@@ -995,7 +979,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (CON LOGICA PLACEHOLDER AVANZATA E VECCHIE ANIMAZIONI) ---
+# --- VISUALIZZATORE (CON LOGICA CORRETTA PER RIMOZIONE MEDIA) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1102,7 +1086,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
             border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
             position: relative;
-            /* MODIFICA: Rimossa opacity e transition, ora gestite dalle animazioni */
         }
         
         #video-player-container::before {
@@ -1116,7 +1099,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #video-player-container iframe { border-radius: 25px; z-index: 2; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         
-        /* NUOVA CLASSE PER LE IMMAGINI PLACEHOLDER */
         .placeholder-image {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             object-fit: cover; z-index: 2; border-radius: 25px;
@@ -1131,12 +1113,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #ad-video-bg { object-fit: cover; }
         #ad-video { object-fit: contain; z-index: 4; }
         
-        /* === MODIFICA: ANIMAZIONI RIPRISTINATE === */
         .box-enter-animation { animation: box-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
-        /* === FINE MODIFICA === */
     </style>
 </head>
 <body>
@@ -1181,21 +1161,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const announcementSound = document.getElementById('announcement-sound');
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
 
-    // === NUOVA SEZIONE: COSTANTI IMMAGINI ===
     const IMG_DEFAULT = 'https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg';
     const IMG_NOT_AVAILABLE = 'https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg';
     const IMG_LOADING = 'https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg';
-    // ========================================
 
     let lastKnownState = {};
-    let currentMediaState = null; // Stato attuale del player (default, loading, server, embed, not_available, error)
-    let mediaTimeout = null; // Per gestire i timeout di loading e error
+    let currentMediaState = null;
+    let mediaTimeout = null;
     
-    // === NUOVA SEZIONE: FUNZIONI HELPER PER GESTIONE MEDIA ===
-
-    /**
-     * Applica lo stato di riproduzione (play/pausa/volume/seek) al video o embed.
-     */
     function applyMediaPlaybackState(state) {
         const videoEl = document.getElementById('ad-video');
         const videoBgEl = document.getElementById('ad-video-bg');
@@ -1222,12 +1195,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    /**
-     * === MODIFICA: Funzione ripristinata per usare le animazioni 'box' ===
-     * Mostra il contenuto (video, embed, placeholder) con animazione box.
-     */
     function showMediaContent(html, stateToApply) {
-        if (mediaTimeout) clearTimeout(mediaTimeout); // Cancella timeout precedenti
+        if (mediaTimeout) clearTimeout(mediaTimeout);
         
         videoPlayerContainer.classList.remove('box-enter-animation');
         videoPlayerContainer.classList.add('box-exit-animation');
@@ -1237,34 +1206,23 @@ document.addEventListener('DOMContentLoaded', () => {
             videoPlayerContainer.classList.remove('box-exit-animation');
             videoPlayerContainer.classList.add('box-enter-animation');
             
-            // Logica per applicare stato e gestire errori
             const videoEl = document.getElementById('ad-video');
             if (videoEl) {
-                // Applica stato playback *dopo* che il video è pronto
                 videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
-                
-                // Gestione Errore Caricamento Video Locale
                 videoEl.onerror = () => {
                     console.error("Errore caricamento video locale.");
-                    loadMedia('error', stateToApply); // Passa allo stato di errore
+                    loadMedia('error', stateToApply);
                 };
             } else if (html.includes('<iframe')) {
-                // Per gli embed, non possiamo aspettare 'oncanplay' in modo affidabile
                 applyMediaPlaybackState(stateToApply);
             }
-        }, 600); // Durata della transizione CSS (animation 0.6s)
+        }, 600);
     }
-    // === FINE MODIFICA ===
 
-    /**
-     * Logica principale per decidere quale contenuto mostrare.
-     */
     function loadMedia(targetState, state) {
-        // Non fare nulla se lo stato è già quello (tranne per 'loading' che è un trigger)
         if (currentMediaState === targetState && targetState !== 'loading') {
             return;
         }
-
         currentMediaState = targetState;
         let contentHtml = '';
 
@@ -1283,10 +1241,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 contentHtml = `<img src="${IMG_LOADING}" class="placeholder-image" alt="Caricamento in corso...">`;
                 showMediaContent(contentHtml, state);
                 
-                // Imposta il pre-roll di 1.5 secondi
                 mediaTimeout = setTimeout(() => {
-                    // Dopo 1.5s, carica il media effettivo (server o embed)
-                    // Verifica che lo stato non sia cambiato di nuovo nel frattempo
                     if (currentMediaState === 'loading') {
                         const nextState = state.mediaSource === 'server' ? 'server' : 'embed';
                         loadMedia(nextState, state);
@@ -1310,12 +1265,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
                 
             case 'error':
-                // Mostra l'immagine "Non Disponibile"
                 console.log("Stato errore: mostro 'Non Disponibile' per 10s");
                 contentHtml = `<img src="${IMG_NOT_AVAILABLE}" class="placeholder-image" alt="Errore nel caricamento">`;
                 showMediaContent(contentHtml, state);
                 
-                // Dopo 10 secondi, torna al placeholder default
                 mediaTimeout = setTimeout(() => {
                     if (currentMediaState === 'error') {
                         loadMedia('default', state);
@@ -1325,9 +1278,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // === FINE NUOVA SEZIONE ===
-
-
     const loaderEl = document.getElementById('loader');
     const containerEl = document.querySelector('.container');
     const logoEl = document.querySelector('.logo');
@@ -1386,26 +1336,21 @@ document.addEventListener('DOMContentLoaded', () => {
     
     /**
      * =============================================
-     * FUNZIONE updateDisplay (Logica invariata)
+     * FUNZIONE updateDisplay (CON LOGICA CORRETTA)
      * =============================================
      */
     function updateDisplay(state) {
         if (!checkServiceStatus(state) || !state.linesData) {
-            // Se il servizio è offline o i dati non sono pronti, non fare nulla
-            // (checkServiceStatus gestisce già l'overlay)
             return;
         }
 
         const isInitialLoad = !lastKnownState.currentLineKey && state.currentLineKey;
         
-        // 1. Mostra UI principale (logo, testo, etc.)
         loaderEl.classList.add('hidden');
         containerEl.classList.add('visible');
         logoEl.classList.add('visible');
         
-        // 2. Aggiorna informazioni Linea e Fermata
         const line = state.linesData[state.currentLineKey];
-        // Se non c'è linea, non possiamo aggiornare il testo, ma il media sì
         if (line) {
             const stop = line.stops[state.currentStopIndex];
             const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
@@ -1440,7 +1385,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 3. Gestisci Annunci e Prenotazioni
         if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
             playAnnouncement();
         }
@@ -1452,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 4. Nuova Logica di Gestione Media
+        // === MODIFICA: Logica di Gestione Media Corretta ===
         const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
         const notAvailableChanged = state.videoNotAvailable !== lastKnownState.videoNotAvailable;
         const playbackChanged = state.playbackState !== lastKnownState.playbackState ||
@@ -1462,27 +1406,35 @@ document.addEventListener('DOMContentLoaded', () => {
         let targetMediaState = '';
         
         if (state.videoNotAvailable) {
+            // Caso 1: Priorità massima, "Non Disponibile" è attivo
             targetMediaState = 'not_available';
         } else if (mediaChanged) {
-            // Se il media è cambiato, mostra loading
-            targetMediaState = 'loading';
+            // Caso 2: C'è stato un aggiornamento media
+            if (state.mediaSource) {
+                // Media Aggiunto o Cambiato -> Mostra Loading
+                targetMediaState = 'loading';
+            } else {
+                // Media Rimosso (mediaSource è null) -> Mostra Default
+                targetMediaState = 'default'; // <<< ==== QUESTA È LA CORREZIONE
+            }
         } else if (currentMediaState === null) {
-            // Se è il caricamento iniziale (currentMediaState è null)
-            if (state.mediaSource) targetMediaState = 'loading'; // C'è un media, vai in loading
-            else targetMediaState = 'default'; // Non c'è media, vai al default
-        }
-        else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
-            // Se è cambiato solo il playback, applicalo
+            // Caso 3: Caricamento iniziale
+            if (state.mediaSource) {
+                targetMediaState = 'loading'; // C'è un media, vai in loading
+            } else {
+                targetMediaState = 'default'; // Non c'è media, vai al default
+            }
+        } else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
+            // Caso 4: Solo playback è cambiato (play/pausa/volume)
              applyMediaPlaybackState(state);
-        } else if (!state.mediaSource && !state.videoNotAvailable && currentMediaState !== 'default') {
-             // Se il media è stato rimosso (no source) e non è 'not available', torna a default
-             targetMediaState = 'default';
         }
-
+        
         // Se lo stato target è diverso, ricarica il contenuto
-        if (targetMediaState && targetMediaState !== currentMediaState) {
+        // Aggiunta: 'notAvailableChanged' deve forzare un ricaricamento
+        if (targetMediaState && (targetMediaState !== currentMediaState || notAvailableChanged)) {
             loadMedia(targetMediaState, state);
         }
+        // === FINE MODIFICA ===
         
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
@@ -1504,7 +1456,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 # -------------------------------------------------------------------
-# 4. ROUTE E API WEBSOCKET (CON SICUREZZA POTENZIATA E CORRETTA)
+# 4. ROUTE E API WEBSOCKET (Invariato)
 # -------------------------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1572,7 +1524,6 @@ def pagina_visualizzatore():
 @login_required
 def announcement_audio():
     try:
-        # NOTA: Assicurati che il file audio esista nella stessa cartella di app.py
         return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
@@ -1582,7 +1533,6 @@ def announcement_audio():
 @login_required
 def booked_stop_audio():
     try:
-        # NOTA: Assicurati che il file 'bip.mp3' esista
         return send_file('bip.mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
@@ -1612,13 +1562,12 @@ def clear_video():
     current_video_file = {'data': None, 'mimetype': None, 'name': None}
     return jsonify({'success': True})
 
-# --- GESTIONE WEBSOCKET ---
+# --- GESTIONE WEBSOCKET (Invariato) ---
 
 @socketio.on('connect')
 def handle_connect():
     if not current_user.is_authenticated: return False
     print(f"Client autorizzato connesso: {current_user.name} ({request.sid})")
-    # Invia immediatamente lo stato attuale (che ora ha un default)
     if current_app_state: 
         socketio.emit('initial_state', current_app_state, room=request.sid)
 
@@ -1632,13 +1581,11 @@ def handle_update_all(data):
     global current_app_state
     if current_app_state is None: current_app_state = {}
     current_app_state.update(data)
-    # Invia 'state_updated' a tutti gli altri
     socketio.emit('state_updated', current_app_state, skip_sid=request.sid)
 
 @socketio.on('request_initial_state')
 def handle_request_initial_state():
     if not current_user.is_authenticated: return
-    # (Questa è una fallback, 'connect' ora dovrebbe bastare)
     if current_app_state: 
         socketio.emit('initial_state', current_app_state, room=request.sid)
 
@@ -1649,7 +1596,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v12 (Stato Default e Animazioni Ripristinate)")
+    print("   SERVER HARZAFI v13 (Gestione Rimozione Media Corretta)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
