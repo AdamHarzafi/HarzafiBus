@@ -1,12 +1,3 @@
-# -------------------------------------------------------------------
-# !!! CORREZIONE CRITICA PER EVENTLET !!!
-# Eventlet deve eseguire il monkey_patching prima di qualsiasi altro import.
-# Questo risolve l'eccezione che blocca la comunicazione SocketIO.
-# -------------------------------------------------------------------
-import eventlet
-eventlet.monkey_patch()
-# -------------------------------------------------------------------
-
 import sys
 import socket
 from functools import wraps
@@ -192,7 +183,7 @@ LOGIN_PAGE_HTML = """
                     {{ form.password(id="password", class="form-control", required=True) }}
                     <button type="button" id="password-toggle" title="Mostra/Nascondi password">
                         <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 4C7 4 2.73 7.11 1 11.5 2.73 15.89 7 19 12 19s9.27-3.11 11-7.5C21.27 7.11 17 4 12 4zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49 .2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75 .99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67 .24-1.38 .37-2.14 .37-2.76 0-5-2.24-5-5 0-.76 .13-1.47 .37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
+                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49 .2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75.99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67 .24-1.38 .37-2.14 .37-2.76 0-5-2.24-5-5 0-.76 .13-1.47 .37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
                     </button>
                 </div>
             </div>
@@ -219,7 +210,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (CON LOGICA 'loadData' CORRETTA) ---
+# --- PANNELLO DI CONTROLLO "APPLE-STYLE" (CON ANTEPRIMA RIDIMENSIONATA E INTERATTIVA) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -453,7 +444,6 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                 <a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-secondary">Apri in Schermo Intero</a>
             </div>
         </section>
-        
         <section class="control-section">
             <h2>Gestione Media e Messaggi</h2>
              <p class="subtitle">Carica contenuti video, controlla la riproduzione o imposta messaggi a scorrimento.</p>
@@ -466,11 +456,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                     <input type="file" id="video-importer" accept="video/*" style="display: none;">
                     <button id="import-video-btn" class="btn-secondary">Importa Video Locale</button>
                     <p id="media-upload-status" style="font-size: 14px; color: var(--text-secondary); margin-top: 15px;">Nessun media caricato.</p>
-                    
                     <button id="remove-media-btn" class="btn-danger" style="display: none; width: auto; padding: 8px 15px; font-size: 13px;">Rimuovi Media</button>
-                    
-                    <button id="disable-media-btn" class="btn-secondary" style="margin-top: 10px; width: 100%;">DISATTIVARE CONTENUTI VIDEO</button>
-
                  </div>
                  <div>
                      <label for="info-messages-input">Messaggi a scorrimento (uno per riga)</label>
@@ -489,7 +475,18 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                         </div>
                     </div>
                  </div>
-             </div>
+                 <div>
+                    <label>Modalità "Video Non Disponibile"</label>
+                     <div style="display: flex; align-items: center; justify-content: space-between; background-color: var(--content-background-light); padding: 10px 15px; border-radius: 12px;">
+                        <span id="video-not-available-status-text" style="font-weight: 600;">Disattivato</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="video-not-available-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <p style="font-size: 13px; color: var(--text-secondary); margin-top: 10px;">Forza la visualizzazione di un'immagine "non disponibile" sul viewer.</p>
+                 </div>
+                 </div>
         </section>
 
         <section class="control-section">
@@ -558,6 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
             seekAction: JSON.parse(localStorage.getItem('busSystem-seekAction') || 'null'),
             infoMessages: JSON.parse(localStorage.getItem('busSystem-infoMessages') || '[]'),
             serviceStatus: serviceStatus,
+            videoNotAvailable: videoNotAvailable, // NUOVO STATO
             announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null'),
             stopRequested: JSON.parse(localStorage.getItem('busSystem-stopRequested') || 'null')
         };
@@ -573,7 +571,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const importEmbedBtn = document.getElementById('import-embed-btn');
     const embedCodeInput = document.getElementById('embed-code-input');
     const removeMediaBtn = document.getElementById('remove-media-btn');
-    const disableMediaBtn = document.getElementById('disable-media-btn'); 
     const mediaUploadStatusText = document.getElementById('media-upload-status');
     const lineSelector = document.getElementById('line-selector');
     const prevBtn = document.getElementById('prev-btn');
@@ -598,8 +595,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceStatusToggle = document.getElementById('service-status-toggle');
     const serviceStatusText = document.getElementById('service-status-text');
     const resetDataBtn = document.getElementById('reset-data-btn');
-    
     const bookedBtn = document.getElementById('booked-btn');
+
+    // NUOVI SELETTORI PER TOGGLE "NON DISPONIBILE"
+    const videoNotAvailableToggle = document.getElementById('video-not-available-toggle');
+    const videoNotAvailableStatusText = document.getElementById('video-not-available-status-text');
 
     // Media Controls
     const mediaControlsContainer = document.getElementById('media-controls-container');
@@ -610,6 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const seekFwdBtn = document.getElementById('seek-fwd-btn');
 
     let linesData = {}, currentLineKey = null, currentStopIndex = 0, serviceStatus = 'online';
+    let videoNotAvailable = false; // NUOVO STATO GLOBALE
 
     function getDefaultData() {
         return {
@@ -617,25 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // ===================================================================
-    // !!! INIZIO CODICE CORRETTO !!!
-    // Questa funzione ora controlla se i dati caricati sono vuoti
-    // e, in caso affermativo, carica i dati predefiniti.
-    // ===================================================================
-    function loadData() {
-        let loadedData = JSON.parse(localStorage.getItem('busSystem-linesData'));
-        // SE I DATI MANCANO O SONO UN OGGETTO VUOTO, USA I PREDEFINITI
-        if (!loadedData || Object.keys(loadedData).length === 0) {
-            linesData = getDefaultData();
-        } else {
-            linesData = loadedData;
-        }
-        saveData(); // Salva lo stato (corretto o predefinito)
-    }
-    // ===================================================================
-    // !!! FINE CODICE CORRETTO !!!
-    // ===================================================================
-
+    function loadData() { linesData = JSON.parse(localStorage.getItem('busSystem-linesData')) || getDefaultData(); saveData(); }
     function saveData() { localStorage.setItem('busSystem-linesData', JSON.stringify(linesData)); sendFullStateUpdate(); }
     function loadMessages() {
         const messages = localStorage.getItem('busSystem-infoMessages');
@@ -663,23 +646,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (mediaSource === 'embed') {
             mediaUploadStatusText.textContent = `Media da Embed attivo.`;
-            removeMediaBtn.textContent = 'Rimuovi Media';
             removeMediaBtn.style.display = 'inline-block';
-            disableMediaBtn.style.display = 'inline-block';
         } else if (mediaSource === 'server' && videoName) {
             mediaUploadStatusText.textContent = `Video locale: ${videoName}`;
-            removeMediaBtn.textContent = 'Rimuovi Media';
             removeMediaBtn.style.display = 'inline-block';
-            disableMediaBtn.style.display = 'inline-block';
-        } else if (mediaSource === 'disabled') {
-            mediaUploadStatusText.textContent = `Contenuti video disattivati.`;
-            removeMediaBtn.textContent = 'Riattiva (pulisci stato)';
-            removeMediaBtn.style.display = 'inline-block';
-            disableMediaBtn.style.display = 'none';
         } else {
             mediaUploadStatusText.textContent = 'Nessun media caricato.';
             removeMediaBtn.style.display = 'none';
-            disableMediaBtn.style.display = 'inline-block';
         }
     }
 
@@ -693,7 +666,7 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.removeItem('busSystem-embedCode');
             localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
             loadMediaStatus(); sendFullStateUpdate();
-        } else { alert('Errore during the upload.'); }
+        } else { alert('Errore durante il caricamento del video.'); }
         importVideoBtn.disabled = false; importVideoBtn.textContent = 'Importa Video Locale';
     }
     async function handleEmbedImport() {
@@ -710,32 +683,13 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
         loadMediaStatus(); embedCodeInput.value = ''; sendFullStateUpdate();
     }
-    
     async function removeMedia() {
-        const mediaSource = localStorage.getItem('busSystem-mediaSource');
-        const confirmMsg = (mediaSource === 'disabled') ? 
-            'Vuoi riattivare il player? (Questo pulirà lo stato "disattivato")' : 
-            'Rimuovere il media attuale?';
-            
-        if (!confirm(confirmMsg)) return;
-        
+        if (!confirm('Rimuovere il media attuale?')) return;
         await fetchAuthenticated('/clear-video', { method: 'POST' });
-        localStorage.removeItem('busSystem-mediaSource'); 
-        localStorage.removeItem('busSystem-videoName');
+        localStorage.removeItem('busSystem-mediaSource'); localStorage.removeItem('busSystem-videoName');
         localStorage.removeItem('busSystem-embedCode');
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
         loadMediaStatus(); sendFullStateUpdate();
-    }
-    
-    async function disableMedia() {
-        if (!confirm('Disattivare la riproduzione di tutti i contenuti video? Il player mostrerà un\'immagine "Non disponibile".')) return;
-        await fetchAuthenticated('/clear-video', { method: 'POST' }); 
-        localStorage.setItem('busSystem-mediaSource', 'disabled'); 
-        localStorage.removeItem('busSystem-videoName');
-        localStorage.removeItem('busSystem-embedCode');
-        localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
-        loadMediaStatus();
-        sendFullStateUpdate();
     }
 
     function saveServiceStatus() { localStorage.setItem('busSystem-serviceStatus', serviceStatus); sendFullStateUpdate(); }
@@ -745,6 +699,20 @@ document.addEventListener('DOMContentLoaded', () => {
         serviceStatusText.style.color = isOnline ? 'var(--success)' : 'var(--danger)';
         serviceStatusToggle.checked = isOnline;
     }
+
+    // --- NUOVE FUNZIONI PER TOGGLE "NON DISPONIBILE" ---
+    function saveVideoNotAvailableStatus() {
+        localStorage.setItem('busSystem-videoNotAvailable', videoNotAvailable);
+        sendFullStateUpdate();
+    }
+    function renderVideoNotAvailableStatus() {
+        const isNotAvailable = videoNotAvailable === true;
+        videoNotAvailableStatusText.textContent = isNotAvailable ? 'Attivato' : 'Disattivato';
+        videoNotAvailableStatusText.style.color = isNotAvailable ? 'var(--danger)' : 'var(--text-primary)';
+        videoNotAvailableToggle.checked = isNotAvailable;
+    }
+    // --- FINE NUOVE FUNZIONI ---
+
 
     function renderAll() { renderNavigationPanel(); renderManagementPanel(); renderStatusDisplay(); }
     function renderNavigationPanel() {
@@ -761,21 +729,15 @@ document.addEventListener('DOMContentLoaded', () => {
             lineSelector.innerHTML = '<option>Nessuna linea disponibile</option>';
         }
     }
-    
-    // --- FUNZIONE CON CORREZIONE ---
     function renderManagementPanel() {
         lineManagementList.innerHTML = '';
         Object.keys(linesData).sort().forEach(key => {
             const item = document.createElement('li');
             item.className = 'line-item';
-            // --- ERRORE CORRETTO QUI ---
-            // Era: </button</div>`
-            // Ora: </button></div>` (aggiunto >)
             item.innerHTML = `<span>${key} → ${linesData[key].direction}</span><div class="line-actions"><button class="btn-secondary edit-btn" data-id="${key}">Modifica</button><button class="btn-danger delete-btn" data-id="${key}">Elimina</button></div>`;
             lineManagementList.appendChild(item);
         });
     }
-
     function renderStatusDisplay() {
         const line = linesData[currentLineKey];
         const hasLine = line && line.stops && line.stops.length > 0;
@@ -889,7 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
             } catch (e) {
-                console.warn("Contenuto iframe non accessibile. Controlli anteprima disabilitati.");
+                console.warn("Contenuto dell'iframe non accessibile. I controlli di riproduzione sono disabilitati.");
                 togglePlaybackBtn.disabled = true;
                 togglePlaybackBtn.textContent = 'Riproduzione non controllabile';
             }
@@ -912,9 +874,15 @@ document.addEventListener('DOMContentLoaded', () => {
         setupPreviewControls();
         loadData();
         loadMessages();
-        serviceStatus = 'online';
+        
+        serviceStatus = 'online'; // Default
         saveServiceStatus();
         renderServiceStatus();
+        
+        // NUOVA INIZIALIZZAZIONE TOGGLE
+        videoNotAvailable = localStorage.getItem('busSystem-videoNotAvailable') === 'true';
+        renderVideoNotAvailableStatus();
+        
         currentLineKey = localStorage.getItem('busSystem-currentLine');
         currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex'), 10) || 0;
         renderAll();
@@ -933,6 +901,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
     
+    // NUOVO EVENT LISTENER
+    videoNotAvailableToggle.addEventListener('change', () => {
+        videoNotAvailable = videoNotAvailableToggle.checked;
+        saveVideoNotAvailableStatus();
+        renderVideoNotAvailableStatus();
+    });
+
     bookedBtn.addEventListener('click', () => {
         localStorage.setItem('busSystem-stopRequested', JSON.stringify({ timestamp: Date.now() }));
         sendFullStateUpdate();
@@ -954,33 +929,14 @@ document.addEventListener('DOMContentLoaded', () => {
     videoImporter.addEventListener('change', handleLocalVideoUpload);
     importEmbedBtn.addEventListener('click', handleEmbedImport);
     removeMediaBtn.addEventListener('click', removeMedia);
-    disableMediaBtn.addEventListener('click', disableMedia); 
     addNewLineBtn.addEventListener('click', () => { document.getElementById('edit-line-id').value = ''; document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; lineEditorForm.reset(); stopsListContainer.innerHTML = ''; addStopToModal(); modal.showModal(); });
-    
     lineManagementList.addEventListener('click', (e) => {
-        const target = e.target.closest('button'); 
-        if (!target) return; 
-        const lineId = target.dataset.id;
-        
+        const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
         if (target.classList.contains('edit-btn')) {
-            editLineId.value = lineId; 
-            document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; 
-            const line = linesData[lineId];
-            lineNameInput.value = lineId; 
-            lineDirectionInput.value = line.direction; 
-            stopsListContainer.innerHTML = ''; 
-            (line.stops || []).forEach(s => addStopToModal(s)); 
-            modal.showModal();
-        } 
-        if (target.classList.contains('delete-btn')) { 
-            if (confirm(`Eliminare la linea "${lineId}"?`)) { 
-                delete linesData[lineId]; 
-                saveData(); 
-                renderAll(); 
-            } 
-        }
+            editLineId.value = lineId; document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; const line = linesData[lineId];
+            lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; (line.stops || []).forEach(s => addStopToModal(s)); modal.showModal();
+        } if (target.classList.contains('delete-btn')) { if (confirm(`Eliminare la linea "${lineId}"?`)) { delete linesData[lineId]; saveData(); renderAll(); } }
     });
-
     addStopBtn.addEventListener('click', () => addStopToModal());
     stopsListContainer.addEventListener('click', (e) => { if (e.target.classList.contains('remove-stop-btn')) { if (stopsListContainer.children.length > 1) e.target.parentElement.remove(); else alert('Ogni linea deve avere almeno una fermata.'); } });
     function addStopToModal(stop = { name: '', subtitle: '' }) {
@@ -989,7 +945,7 @@ document.addEventListener('DOMContentLoaded', () => {
         stopsListContainer.appendChild(stopItem);
     }
     lineEditorForm.addEventListener('submit', (e) => {
-        e.preventDefault(); const originalId = editLineId.value; const newId = lineNameInput.value.trim().toUpperCase(); const direction = lineDirectionInput.value.trim().toUpperCase();
+        e.preventDefault(); const originalId = editLineId.value; const newId = lineNameInput.value.trim().toUpperCase(); const direction = lineDirectionInput.value.trim();
         if (!newId || !direction) { alert('Nome linea e destinazione sono obbligatori.'); return; }
         const stops = Array.from(stopsListContainer.querySelectorAll('.stop-name-input')).map((input, i) => {
             const name = input.value.trim().toUpperCase();
@@ -1013,7 +969,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (Nessuna modifica necessaria, era corretto) ---
+# --- VISUALIZZATORE (CON LOGICA PLACEHOLDER AVANZATA) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1042,22 +998,14 @@ VISUALIZZATORE_COMPLETO_HTML = """
             overflow: hidden;
             font-size: 1.2em;
         }
-        
-        /* Loader pagina (originale) */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
             z-index: 999; transition: opacity 0.8s ease;
         }
-        #loader img {
-            width: 250px; max-width: 70%; 
-            animation: pulse-logo 2s infinite ease-in-out;
-        }
-        #loader p {
-            margin-top: 25px; font-size: 1.2em; font-weight: 700; 
-            text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;
-        }
+        #loader img { width: 250px; max-width: 70%; animation: pulse-logo 2s infinite ease-in-out; }
+        #loader p { margin-top: 25px; font-size: 1.2em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; }
         @keyframes pulse-logo {
             0% { transform: scale(1); opacity: 0.8; }
             50% { transform: scale(1.05); opacity: 1; }
@@ -1115,20 +1063,11 @@ VISUALIZZATORE_COMPLETO_HTML = """
         @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-        
-        /* Stile "Fuori Servizio" (testo) */
-        #service-offline-overlay { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            z-index: 1000; display: flex; align-items: center; justify-content: center; 
-            text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); 
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); 
-            opacity: 0; pointer-events: none; 
-        }
+        #service-offline-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; pointer-events: none; }
         #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
         #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; margin: 0; text-shadow: 0 4px 20px rgba(0,0,0,0.4); }
         #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
-        
         @keyframes fadeInBlur { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
         
@@ -1137,8 +1076,15 @@ VISUALIZZATORE_COMPLETO_HTML = """
             border-radius: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
             position: relative;
-            transition: opacity 0.5s ease, transform 0.5s ease;
+            /* MODIFICATO: animazione gestita da JS */
+            opacity: 0;
+            transition: opacity 0.4s ease-in-out;
         }
+        /* NUOVA CLASSE PER GESTIRE IL FADE-IN */
+        #video-player-container.content-visible {
+            opacity: 1;
+        }
+        
         #video-player-container::before {
             content: '';
             position: absolute;
@@ -1149,16 +1095,11 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         #video-player-container iframe { border-radius: 25px; z-index: 2; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
-        .placeholder-content {
+        
+        /* NUOVA CLASSE PER LE IMMAGINI PLACEHOLDER */
+        .placeholder-image {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            text-align: center; padding: 20px; box-sizing: border-box; z-index: 2;
-        }
-        .placeholder-content img {
-            width: 100%; height: 100%; object-fit: cover;
-        }
-        .placeholder-content.padded {
-            padding: 0; overflow: hidden;
+            object-fit: cover; z-index: 2; border-radius: 25px;
         }
         
         .video-background-blur {
@@ -1170,10 +1111,8 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #ad-video-bg { object-fit: cover; }
         #ad-video { object-fit: contain; z-index: 4; }
         
-        .box-enter-animation { animation: box-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-        @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+        /* ANIMAZIONI DI INGRESSO/USCITA RIMOSSE - gestite da opacity */
+        
     </style>
 </head>
 <body>
@@ -1184,7 +1123,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
         <p>CONNESSIONE AL SERVER...</p>
     </div>
-
     <div class="main-content-wrapper">
         <div class="container">
             <div class="line-graphic">
@@ -1201,11 +1139,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
         </div>
     </div>
     <div class="video-wrapper">
-        <div id="video-player-container" class="aspect-ratio-16-9" style="opacity: 0;"></div>
+        <div id="video-player-container" class="aspect-ratio-16-9"></div>
     </div>
     
     <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
-
     <div id="service-offline-overlay">
         <div class="overlay-content">
             <h2>NESSUN SERVIZIO</h2>
@@ -1220,12 +1157,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const announcementSound = document.getElementById('announcement-sound');
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
 
-    let lastKnownState = {};
+    // === NUOVA SEZIONE: COSTANTI IMMAGINI ===
+    const IMG_DEFAULT = 'https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg';
+    const IMG_NOT_AVAILABLE = 'https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg';
+    const IMG_LOADING = 'https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg';
+    // ========================================
 
-    function applyMediaState(state) {
+    let lastKnownState = {};
+    let currentMediaState = null; // Stato attuale del player (default, loading, server, embed, not_available, error)
+    let mediaTimeout = null; // Per gestire i timeout di loading e error
+    
+    // === NUOVA SEZIONE: FUNZIONI HELPER PER GESTIONE MEDIA ===
+
+    /**
+     * Applica lo stato di riproduzione (play/pausa/volume/seek) al video o embed.
+     */
+    function applyMediaPlaybackState(state) {
         const videoEl = document.getElementById('ad-video');
         const videoBgEl = document.getElementById('ad-video-bg');
-        if (!videoEl) return; // Se non c'è video (es. placeholder), non fare nulla
+        if (!videoEl) return;
 
         const newVolume = parseFloat(state.volumeLevel);
         if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
@@ -1247,73 +1197,102 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
-    
-    function loadMediaOrPlaceholder(state) {
-        let newContent = '';
-        let isLoadingMedia = false; 
 
-        if (state.mediaSource === 'embed' && state.embedCode) {
-            newContent = state.embedCode;
-            isLoadingMedia = true;
-        } else if (state.mediaSource === 'server') {
-            const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
-            newContent = `
-                <div class="video-background-blur">
-                    <video id="ad-video-bg" loop playsinline muted src="${videoUrl}"></video>
-                </div>
-                <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
-            isLoadingMedia = true;
-        } else if (state.mediaSource === 'disabled') {
-            // Stato "Disattivato"
-            newContent = `<div class="placeholder-content padded">
-                            <img src="https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg" alt="Contenuti non disponibili">
-                         </div>`;
-            isLoadingMedia = false;
-        } else {
-            // Stato "Pronto" (nessun media)
-            newContent = `<div class="placeholder-content padded">
-                            <img src="https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg" alt="Pronto per contenuti video">
-                         </div>`;
-            isLoadingMedia = false;
-        }
+    /**
+     * Mostra il contenuto (video, embed, placeholder) con animazione di dissolvenza.
+     */
+    function showMediaContent(html, stateToApply) {
+        if (mediaTimeout) clearTimeout(mediaTimeout); // Cancella timeout precedenti
         
-        const loadingContent = `<div class="placeholder-content padded">
-                                  <img src="https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg" alt="Caricamento in corso...">
-                                </div>`;
-
-        videoPlayerContainer.classList.remove('box-enter-animation');
-        videoPlayerContainer.classList.add('box-exit-animation');
+        videoPlayerContainer.classList.remove('content-visible'); // Fade out
         
-        if (isLoadingMedia) {
-            // --- FLUSSO MEDIA ---
-            setTimeout(() => {
-                videoPlayerContainer.innerHTML = loadingContent;
-                videoPlayerContainer.classList.remove('box-exit-animation');
-                videoPlayerContainer.classList.add('box-enter-animation');
-            }, 500); 
+        setTimeout(() => {
+            videoPlayerContainer.innerHTML = html;
+            videoPlayerContainer.classList.add('content-visible'); // Fade in
+            
+            const videoEl = document.getElementById('ad-video');
+            if (videoEl) {
+                // Applica stato playback *dopo* che il video è pronto
+                videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
+                
+                // Gestione Errore Caricamento Video Locale
+                videoEl.onerror = () => {
+                    console.error("Errore caricamento video locale.");
+                    loadMedia('error', stateToApply); // Passa allo stato di errore
+                };
+            } else if (html.includes('<iframe')) {
+                // Per gli embed, non possiamo aspettare 'oncanplay' in modo affidabile
+                applyMediaPlaybackState(stateToApply);
+            }
+        }, 400); // Durata della transizione CSS (opacity 0.4s)
+    }
 
-            setTimeout(() => {
-                videoPlayerContainer.classList.remove('box-enter-animation');
-                videoPlayerContainer.classList.add('box-exit-animation');
-            }, 1500); 
+    /**
+     * Logica principale per decidere quale contenuto mostrare.
+     */
+    function loadMedia(targetState, state) {
+        currentMediaState = targetState;
+        let contentHtml = '';
 
-            setTimeout(() => {
-                videoPlayerContainer.innerHTML = newContent;
-                videoPlayerContainer.classList.remove('box-exit-animation');
-                videoPlayerContainer.classList.add('box-enter-animation');
-                applyMediaState(state); 
-            }, 2000); 
+        switch (targetState) {
+            case 'not_available':
+                contentHtml = `<img src="${IMG_NOT_AVAILABLE}" class="placeholder-image" alt="Contenuto non disponibile">`;
+                showMediaContent(contentHtml, state);
+                break;
+            
+            case 'default':
+                contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
+                showMediaContent(contentHtml, state);
+                break;
 
-        } else {
-            // --- FLUSSO PLACEHOLDER ("Pronto" o "Disattivato") ---
-            setTimeout(() => {
-                videoPlayerContainer.innerHTML = newContent;
-                videoPlayerContainer.classList.remove('box-exit-animation');
-                videoPlayerContainer.classList.add('box-enter-animation');
-                // Rimosso applyMediaState(state) perché qui non c'è <video>
-            }, 500);
+            case 'loading':
+                contentHtml = `<img src="${IMG_LOADING}" class="placeholder-image" alt="Caricamento in corso...">`;
+                showMediaContent(contentHtml, state);
+                
+                // Imposta il pre-roll di 1.5 secondi
+                mediaTimeout = setTimeout(() => {
+                    // Dopo 1.5s, carica il media effettivo (server o embed)
+                    // Verifica che lo stato non sia cambiato di nuovo nel frattempo
+                    if (currentMediaState === 'loading') {
+                        const nextState = state.mediaSource === 'server' ? 'server' : 'embed';
+                        loadMedia(nextState, state);
+                    }
+                }, 1500);
+                break;
+                
+            case 'server':
+                const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
+                contentHtml = `
+                    <div class="video-background-blur">
+                        <video id="ad-video-bg" loop playsinline muted src="${videoUrl}"></video>
+                    </div>
+                    <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
+                showMediaContent(contentHtml, state);
+                break;
+                
+            case 'embed':
+                contentHtml = state.embedCode;
+                showMediaContent(contentHtml, state);
+                break;
+                
+            case 'error':
+                // Mostra l'immagine "Non Disponibile"
+                console.log("Stato errore: mostro 'Non Disponibile' per 10s");
+                contentHtml = `<img src="${IMG_NOT_AVAILABLE}" class="placeholder-image" alt="Errore nel caricamento">`;
+                showMediaContent(contentHtml, state);
+                
+                // Dopo 10 secondi, torna al placeholder default
+                mediaTimeout = setTimeout(() => {
+                    if (currentMediaState === 'error') {
+                        loadMedia('default', state);
+                    }
+                }, 10000);
+                break;
         }
     }
+    
+    // === FINE NUOVA SEZIONE ===
+
 
     const loaderEl = document.getElementById('loader');
     const containerEl = document.querySelector('.container');
@@ -1371,28 +1350,32 @@ document.addEventListener('DOMContentLoaded', () => {
         return !isOffline;
     }
     
+    /**
+     * =============================================
+     * FUNZIONE updateDisplay (COMPLETAMENTE RIFATTA)
+     * =============================================
+     */
     function updateDisplay(state) {
         if (!checkServiceStatus(state) || !state.linesData || !state.currentLineKey) {
+            // Se il servizio è offline o i dati non sono pronti, non fare nulla
+            // (checkServiceStatus gestisce già l'overlay)
             return;
         }
 
         const isInitialLoad = !lastKnownState.currentLineKey;
-        const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
-        const stopIndexChanged = lastKnownState.currentStopIndex !== state.currentStopIndex;
-        const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
-
+        
+        // 1. Mostra UI principale (logo, testo, etc.)
         loaderEl.classList.add('hidden');
         containerEl.classList.add('visible');
         logoEl.classList.add('visible');
-        if (isInitialLoad) {
-            videoPlayerContainer.style.opacity = '1';
-            videoPlayerContainer.classList.add('box-enter-animation');
-        }
-
+        
+        // 2. Aggiorna informazioni Linea e Fermata
         const line = state.linesData[state.currentLineKey];
         if (!line) return;
         const stop = line.stops[state.currentStopIndex];
-        
+        const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
+        const stopIndexChanged = lastKnownState.currentStopIndex !== state.currentStopIndex;
+
         const updateContent = () => {
             lineIdEl.textContent = state.currentLineKey;
             directionNameEl.textContent = line.direction;
@@ -1421,6 +1404,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateContent();
         }
 
+        // 3. Gestisci Annunci e Prenotazioni
         if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
             playAnnouncement();
         }
@@ -1432,15 +1416,39 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // --- LOGICA MEDIA CORRETTA ---
-        if (isInitialLoad || mediaChanged) {
-            loadMediaOrPlaceholder(state);
-        } else if (state.mediaSource === 'server' || state.mediaSource === 'embed') {
-            // Se il media NON è cambiato (es. cambio fermata) E c'è un video attivo,
-            // applica solo lo stato (volume, play/pausa, seek).
-            applyMediaState(state);
+        // 4. Nuova Logica di Gestione Media
+        const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
+        const notAvailableChanged = state.videoNotAvailable !== lastKnownState.videoNotAvailable;
+        const playbackChanged = state.playbackState !== lastKnownState.playbackState ||
+                                  state.volumeLevel !== lastKnownState.volumeLevel ||
+                                  (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0));
+
+        let targetMediaState = '';
+        
+        if (state.videoNotAvailable) {
+            targetMediaState = 'not_available';
+        } else if (mediaChanged || (isInitialLoad && state.mediaSource)) {
+            // Se il media cambia, O è il caricamento iniziale e C'È un media, mostra loading
+            targetMediaState = 'loading';
+        } else if (isInitialLoad && !state.mediaSource) {
+            // Se è il caricamento iniziale e NON c'è media, vai al default
+            targetMediaState = 'default';
+        } else if (state.mediaSource === 'server') {
+            targetMediaState = 'server';
+        } else if (state.mediaSource === 'embed') {
+            targetMediaState = 'embed';
+        } else {
+            targetMediaState = 'default'; // Fallback (nessun media)
         }
-        // Se non c'è media (Pronto/Disattivato) e il media non è cambiato, non fare nulla.
+
+        // Se lo stato target è diverso, ricarica il contenuto
+        if (targetMediaState !== currentMediaState || mediaChanged || notAvailableChanged) {
+            loadMedia(targetMediaState, state);
+        } 
+        // Se lo stato è lo stesso (server o embed), ma è cambiato solo il playback (play/volume/seek)
+        else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
+            applyMediaPlaybackState(state);
+        }
         
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
@@ -1530,6 +1538,7 @@ def pagina_visualizzatore():
 @login_required
 def announcement_audio():
     try:
+        # NOTA: Assicurati che il file audio esista nella stessa cartella di app.py
         return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
@@ -1539,6 +1548,7 @@ def announcement_audio():
 @login_required
 def booked_stop_audio():
     try:
+        # NOTA: Assicurati che il file 'bip.mp3' esista
         return send_file('bip.mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
@@ -1568,23 +1578,13 @@ def clear_video():
     current_video_file = {'data': None, 'mimetype': None, 'name': None}
     return jsonify({'success': True})
 
-# -------------------------------------------------------------------
-# !!! INIZIO CODICE CORRETTO !!!
-# GESTIONE WEBSOCKET (CORRETTA)
-# -------------------------------------------------------------------
+# --- GESTIONE WEBSOCKET ---
 
 @socketio.on('connect')
 def handle_connect():
     if not current_user.is_authenticated: return False
     print(f"Client autorizzato connesso: {current_user.name} ({request.sid})")
-    global current_app_state # AGGIUNTA PER GESTIRE IL CASO INIZIALE
-    # CORREZIONE: Invia uno stato iniziale (anche vuoto)
-    if current_app_state: 
-        socketio.emit('initial_state', current_app_state, room=request.sid)
-    else:
-        # Questo sblocca il visualizzatore anche se il pannello
-        # non ha mai inviato dati.
-        socketio.emit('initial_state', {}, room=request.sid)
+    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -1601,39 +1601,26 @@ def handle_update_all(data):
 @socketio.on('request_initial_state')
 def handle_request_initial_state():
     if not current_user.is_authenticated: return
-    # CORREZIONE: Invia uno stato iniziale (anche vuoto)
-    if current_app_state: 
-        socketio.emit('initial_state', current_app_state, room=request.sid)
-    else:
-        socketio.emit('initial_state', {}, room=request.sid)
-# -------------------------------------------------------------------
-# !!! FINE CODICE CORRETTO !!!
-# -------------------------------------------------------------------
-
+    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
 
 # -------------------------------------------------------------------
-# 5. BLOCCO DI ESECUZIONE (Rimosso per il deploy con Gunicorn)
+# 5. BLOCCO DI ESECUZIONE
 # -------------------------------------------------------------------
 
-# L'applicazione verrà eseguita da Gunicorn utilizzando l'oggetto 'app'.
-# La sezione 'if __name__ == '__main__': ...' è stata rimossa per evitare
-# conflitti in produzione.
-
-# Se vuoi eseguire in locale per test, puoi usare:
-# socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
-
-# L'istruzione che segue è solo per dare visibilità all'IP locale
-# in caso di esecuzione manuale in un terminale standard.
-try:
-    if sys.argv[0] == 'app.py' or sys.argv[0].endswith('gunicorn'):
-        local_ip = get_local_ip()
-        print("===================================================================")
-        print("   SERVER HARZAFI v10 (SOLUZIONE DEFINITIVA WEBSOCKET)")
-        print("===================================================================")
-        print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
-        print("Credenziali di default: admin / adminpass")
-        print("===================================================================")
-except:
-    pass
-
-# Fine del file. Gunicorn prenderà l'oggetto 'app'.
+if __name__ == '__main__':
+    local_ip = get_local_ip()
+    print("===================================================================")
+    print("   SERVER HARZAFI v11 (Gestione Placeholder Video Avanzata)")
+    print("===================================================================")
+    print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
+    print("Credenziali di default: admin / adminpass")
+    print("===================================================================")
+    # NOTA: Se usi gunicorn + eventlet, questo blocco non viene eseguito.
+    # Per lo sviluppo locale, 'allow_unsafe_werkzeug=True' è ok.
+    # In produzione con gunicorn, non è necessario.
+    try:
+        socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    except ImportError:
+        print("\n--- ATTENZIONE: 'eventlet' non trovato. Eseguo in modalità standard. ---")
+        print("--- Per la produzione, assicurati di averlo installato. ---")
+        socketio.run(app, host='0.0.0.0', port=5000)
