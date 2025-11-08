@@ -1,5 +1,6 @@
 import sys
 import socket
+import re # Importato per gestire i Range Headers (streaming robusto)
 from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash, send_file
@@ -259,7 +260,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         }
         .header-title { display: flex; align-items: center; gap: 15px; }
         .header-title img { max-width: 100px; }
-        .header-title h1 { font-size: 28px; font-weight: 700; margin: 0; }
+        .header-title h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -0.5px; }
         .header-actions { display: flex; align-items: center; gap: 15px; }
         .btn {
             padding: 8px 16px; border-radius: 99px; font-weight: 600; cursor: pointer;
@@ -903,19 +904,23 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
                 videoInIframe = iframeDoc.getElementById('ad-video');
-                const announcementAudio = iframeDoc.getElementById('announcement-sound');
-                const bookedAudio = iframeDoc.getElementById('booked-sound-viewer');
                 
-                // Muto tutti gli audio nell'anteprima
+                // === MODIFICA CHIAVE: MUTA TUTTI GLI AUDIO NELL'ANTEPRIMA ===
+                const announcementAudio = iframeDoc.getElementById('announcement-sound');
                 if (announcementAudio) announcementAudio.muted = true;
+                const bookedAudio = iframeDoc.getElementById('booked-sound-viewer');
                 if (bookedAudio) bookedAudio.muted = true;
                 const stopAudio = iframeDoc.getElementById('stop-announcement-sound');
                 if (stopAudio) stopAudio.muted = true;
                 
                 if (videoInIframe) {
-                    videoInIframe.muted = true;
-                    videoInIframe.pause();
+                    videoInIframe.muted = true; // Rende il video silenzioso nella preview
+                    videoInIframe.pause(); // Lo mette in pausa di default
                     
+                    // Se il video di sfondo esiste (solo per video locali)
+                    const videoBgEl = iframeDoc.getElementById('ad-video-bg');
+                    if (videoBgEl) videoBgEl.muted = true;
+
                     videoInIframe.addEventListener('play', updateButtonState);
                     videoInIframe.addEventListener('pause', updateButtonState);
 
@@ -1260,7 +1265,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         
         #video-player-container {
             width: 100%; max-width: 100%; background-color: transparent;
-            /* === MODIFICA: Bordi più arrotondati === */
+            /* === Bordi più arrotondati (come richiesto) === */
             border-radius: 40px; 
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
@@ -1275,14 +1280,14 @@ VISUALIZZATORE_COMPLETO_HTML = """
             filter: blur(25px) brightness(0.7);
             z-index: 1;
         }
-        /* === MODIFICA: Bordi più arrotondati === */
+        /* === Bordi più arrotondati (come richiesto) === */
         #video-player-container iframe { border-radius: 40px; z-index: 2; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         
         .placeholder-image {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             object-fit: cover; z-index: 2; 
-            /* === MODIFICA: Bordi più arrotondati === */
+            /* === Bordi più arrotondati (come richiesto) === */
             border-radius: 40px;
         }
         
@@ -1356,7 +1361,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyMediaPlaybackState(state) {
         const videoEl = document.getElementById('ad-video');
         const videoBgEl = document.getElementById('ad-video-bg');
-        if (!videoEl) return;
+        
+        // Se non c'è un elemento video (es. è un iframe o un'immagine placeholder), non fare nulla
+        if (!videoEl && !videoPlayerContainer.querySelector('iframe')) return;
+        
+        // Se è un iframe embed, non possiamo controllare direttamente volume/riproduzione
+        if (videoPlayerContainer.querySelector('iframe')) return;
 
         const newVolume = parseFloat(state.volumeLevel);
         if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
@@ -1392,13 +1402,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const videoEl = document.getElementById('ad-video');
             if (videoEl) {
+                // Aggiungiamo un event listener per la riproduzione in loop
+                videoEl.addEventListener('ended', () => {
+                    videoEl.currentTime = 0;
+                    videoEl.play().catch(e => console.error("Errore riavvio loop:", e));
+                });
+                
                 videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
                 videoEl.onerror = () => {
                     console.error("Errore caricamento video locale.");
                     loadMedia('error', stateToApply);
                 };
-            } else if (html.includes('<iframe')) {
-                applyMediaPlaybackState(stateToApply);
             }
         }, 600);
     }
@@ -1434,6 +1448,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
                 
             case 'server':
+                // La query string previene la cache del browser dopo un nuovo upload
                 const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
                 contentHtml = `
                     <div class="video-background-blur">
@@ -1556,14 +1571,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => {
                     updateContent(); // Aggiorna il testo
 
-                    // === NUOVA LOGICA AUDIO STOP (automatico) ===
+                    // === LOGICA AUDIO STOP (automatico) ===
                     const newStop = line.stops[state.currentStopIndex]; // Prendi il *nuovo* stop
                     if (newStop && newStop.audio) {
+                        // L'audio è caricato come Data URL (Base64)
                         stopAnnouncementSound.src = newStop.audio;
                         stopAnnouncementSound.currentTime = 0;
                         
                         const videoEl = document.getElementById('ad-video');
                         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
+                        
+                        // Abbassa il volume del video se è presente
                         if (videoEl && !videoEl.muted) {
                             videoEl.volume = Math.min(originalVolume, 0.15);
                         }
@@ -1574,7 +1592,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (videoEl) videoEl.volume = originalVolume;
                         };
                     }
-                    // === FINE NUOVA LOGICA AUDIO STOP ===
+                    // === FINE LOGICA AUDIO STOP ===
 
                     stopIndicatorEl.classList.remove('exit');
                     stopNameEl.classList.remove('exit');
@@ -1604,7 +1622,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // === LOGICA GESTIONE MEDIA (con correzione toggle) ===
+        // === LOGICA GESTIONE MEDIA ===
         const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
         const notAvailableChanged = state.videoNotAvailable !== lastKnownState.videoNotAvailable;
         const playbackChanged = state.playbackState !== lastKnownState.playbackState ||
@@ -1625,24 +1643,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     targetMediaState = 'default'; // Media Rimosso
                 }
-            } else if (currentMediaState === null) {
-                // È il caricamento iniziale
+            } else if (currentMediaState === null || (notAvailableChanged && currentMediaState === 'not_available')) {
+                // È il caricamento iniziale O il toggle "non disponibile" è stato SPENTO
                 if (state.mediaSource) {
                     targetMediaState = 'loading';
                 } else {
                     targetMediaState = 'default';
                 }
-            } else if (notAvailableChanged) {
-                 // <<< === QUESTA È LA CORREZIONE === >>>
-                 // Il media non è cambiato, ma il toggle "non disponibile" è stato APPENA SPENTO.
-                 // Dobbiamo forzare un ricaricamento dello stato corretto (video o default).
-                 if (state.mediaSource) {
-                    targetMediaState = 'loading'; // Ricarica il video (passando da loading)
-                 } else {
-                    targetMediaState = 'default'; // Ricarica il default
-                 }
             } else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
-                // Caso 3: Solo il playback è cambiato (play/pausa/volume), non serve un reload
+                // Caso 3: Solo il playback è cambiato (play/pausa/volume/seek), non serve un reload
                  applyMediaPlaybackState(state);
             }
         }
@@ -1672,7 +1681,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 # -------------------------------------------------------------------
-# 4. ROUTE E API WEBSOCKET (Invariato)
+# 4. ROUTE E API WEBSOCKET (Invariato nel funzionamento, modificato lo streaming)
 # -------------------------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1767,9 +1776,53 @@ def upload_video():
 @app.route('/stream-video')
 @login_required
 def stream_video():
-    if current_video_file and current_video_file['data']:
-        return Response(current_video_file['data'], mimetype=current_video_file['mimetype'])
-    abort(404)
+    # --- MODIFICA CHIAVE PER STREAMING ROBUSTO ---
+    if not current_video_file or not current_video_file['data']:
+        abort(404)
+
+    video_data = current_video_file['data']
+    mimetype = current_video_file['mimetype']
+    file_size = len(video_data)
+    CHUNK_SIZE = 1024 * 1024 # 1MB chunk size
+    
+    range_header = request.headers.get('Range', None)
+    
+    if range_header:
+        # Gestione richiesta di streaming parziale (status 206)
+        try:
+            # Regex per estrarre il range (es. bytes=0-1023)
+            match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+            if match:
+                byte1 = int(match.group(1))
+                byte2_str = match.group(2)
+                byte2 = int(byte2_str) if byte2_str else file_size - 1
+                
+                if byte2 >= file_size: byte2 = file_size - 1
+                length = byte2 - byte1 + 1
+                
+                # Funzione generatrice per l'invio del chunk richiesto
+                def get_chunk():
+                    yield video_data[byte1:byte2 + 1]
+
+                resp = Response(get_chunk(), 206, mimetype=mimetype)
+                resp.headers.add('Content-Range', 'bytes {0}-{1}/{2}'.format(byte1, byte2, file_size))
+                resp.headers.add('Accept-Ranges', 'bytes')
+                resp.headers.add('Content-Length', str(length))
+                return resp
+
+        except Exception as e:
+            print(f"Errore gestione Range: {e}")
+            pass # Fallback all'invio completo
+            
+    # Invio del file completo (status 200 - fallback o prima richiesta)
+    def generate_full():
+        for i in range(0, file_size, CHUNK_SIZE):
+            yield video_data[i:i + CHUNK_SIZE]
+            
+    resp = Response(generate_full(), 200, mimetype=mimetype)
+    resp.headers.add('Content-Length', str(file_size))
+    return resp
+    # --- FINE MODIFICA CHIAVE ---
 
 @app.route('/clear-video', methods=['POST'])
 @login_required
@@ -1812,12 +1865,13 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v15 (Audio per Fermata e Bordi Stondati)")
+    print("   SERVER HARZAFI v16 (STREAMING ROBUSTO E AUDIO SOLO VISUALIZZATORE)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
     print("===================================================================")
     try:
+        # Per un ambiente di produzione, si raccomanda l'uso di gunicorn/eventlet
         socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
     except ImportError:
         print("\n--- ATTENZIONE: 'eventlet' non trovato. Eseguo in modalità standard. ---")
