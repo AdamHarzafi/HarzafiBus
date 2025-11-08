@@ -979,7 +979,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (CON LOGICA CORRETTA PER RIMOZIONE MEDIA) ---
+# --- VISUALIZZATORE (CON LOGICA CORRETTA PER DISATTIVAZIONE TOGGLE) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1335,9 +1335,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     /**
-     * =============================================
-     * FUNZIONE updateDisplay (CON LOGICA CORRETTA)
-     * =============================================
+     * =========================================================
+     * FUNZIONE updateDisplay (CON LOGICA DI DISATTIVAZIONE)
+     * =========================================================
      */
     function updateDisplay(state) {
         if (!checkServiceStatus(state) || !state.linesData) {
@@ -1403,35 +1403,45 @@ document.addEventListener('DOMContentLoaded', () => {
                                   state.volumeLevel !== lastKnownState.volumeLevel ||
                                   (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0));
 
-        let targetMediaState = '';
+        let targetMediaState = ''; // Lo stato che VOGLIAMO raggiungere
         
         if (state.videoNotAvailable) {
-            // Caso 1: Priorità massima, "Non Disponibile" è attivo
+            // Caso 1: Priorità massima, "Non Disponibile" è ATTIVO
             targetMediaState = 'not_available';
-        } else if (mediaChanged) {
-            // Caso 2: C'è stato un aggiornamento media
-            if (state.mediaSource) {
-                // Media Aggiunto o Cambiato -> Mostra Loading
-                targetMediaState = 'loading';
-            } else {
-                // Media Rimosso (mediaSource è null) -> Mostra Default
-                targetMediaState = 'default'; // <<< ==== QUESTA È LA CORREZIONE
+        } else {
+            // Caso 2: "Non Disponibile" è DISATTIVATO. Decidiamo cosa mostrare.
+            if (mediaChanged) {
+                // È appena stato aggiunto/rimosso un media
+                if (state.mediaSource) {
+                    targetMediaState = 'loading'; // Media Aggiunto
+                } else {
+                    targetMediaState = 'default'; // Media Rimosso
+                }
+            } else if (currentMediaState === null) {
+                // È il caricamento iniziale
+                if (state.mediaSource) {
+                    targetMediaState = 'loading';
+                } else {
+                    targetMediaState = 'default';
+                }
+            } else if (notAvailableChanged) {
+                 // <<< === LA CORREZIONE È QUI === >>>
+                 // Il media non è cambiato, ma il toggle "non disponibile" è stato APPENA SPENTO.
+                 // Dobbiamo forzare un ricaricamento dello stato corretto (video o default).
+                 if (state.mediaSource) {
+                    targetMediaState = 'loading'; // Ricarica il video (passando da loading)
+                 } else {
+                    targetMediaState = 'default'; // Ricarica il default
+                 }
+            } else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
+                // Caso 3: Solo il playback è cambiato (play/pausa/volume), non serve un reload
+                 applyMediaPlaybackState(state);
             }
-        } else if (currentMediaState === null) {
-            // Caso 3: Caricamento iniziale
-            if (state.mediaSource) {
-                targetMediaState = 'loading'; // C'è un media, vai in loading
-            } else {
-                targetMediaState = 'default'; // Non c'è media, vai al default
-            }
-        } else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
-            // Caso 4: Solo playback è cambiato (play/pausa/volume)
-             applyMediaPlaybackState(state);
         }
-        
-        // Se lo stato target è diverso, ricarica il contenuto
-        // Aggiunta: 'notAvailableChanged' deve forzare un ricaricamento
-        if (targetMediaState && (targetMediaState !== currentMediaState || notAvailableChanged)) {
+
+        // Esegui loadMedia SOLO se abbiamo definito un nuovo stato (targetMediaState non è vuoto)
+        // E se questo nuovo stato è diverso da quello attualmente mostrato
+        if (targetMediaState && targetMediaState !== currentMediaState) {
             loadMedia(targetMediaState, state);
         }
         // === FINE MODIFICA ===
@@ -1596,7 +1606,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v13 (Gestione Rimozione Media Corretta)")
+    print("   SERVER HARZAFI v14 (Logica Toggle 'Non Disponibile' Corretta)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
