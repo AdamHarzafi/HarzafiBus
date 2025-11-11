@@ -1,6 +1,8 @@
 import sys
 import socket
-import re # Importato per gestire i Range Headers (streaming robusto)
+import re 
+import os # Importato per gestire i file
+import tempfile # Importato per gestire i file temporanei
 from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash, send_file
@@ -64,6 +66,10 @@ def load_user(user_id):
 
 @app.after_request
 def add_security_headers(response):
+    # QUESTA FUNZIONE (già presente) è CORRETTA.
+    # Impedisce al browser di salvare le pagine nella cache.
+    # Se l'utente preme "Indietro", il browser è costretto a 
+    # richiedere la pagina al server, che verificherà di nuovo il login.
     if request.path != '/login' and not request.path.startswith('/static'):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
@@ -104,7 +110,9 @@ current_app_state = {
     "announcement": None,
     "stopRequested": None
 }
-current_video_file = {'data': None, 'mimetype': None, 'name': None}
+# --- MODIFICA: Salviamo il PERCORSO del file, non i dati in memoria ---
+current_video_file = {'path': None, 'mimetype': None, 'name': None}
+# --- FINE MODIFICA ---
 
 # -------------------------------------------------------------------
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
@@ -739,13 +747,31 @@ document.addEventListener('DOMContentLoaded', () => {
         importVideoBtn.disabled = true; importVideoBtn.textContent = 'CARICAMENTO...';
         const formData = new FormData(); formData.append('video', file);
         const response = await fetchAuthenticated('/upload-video', { method: 'POST', body: formData });
-        if (response && response.ok) {
-            localStorage.setItem('busSystem-mediaSource', 'server'); localStorage.setItem('busSystem-videoName', file.name);
-            localStorage.removeItem('busSystem-embedCode');
-            localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
-            loadMediaStatus(); sendFullStateUpdate();
-        } else { alert('Errore durante il caricamento del video.'); }
+        
+        // --- GESTIONE CARICAMENTO VIDEO ---
+        // 'response' potrebbe essere null se fetchAuthenticated ha gestito un errore 401
+        if (response) {
+            if (response.ok) {
+                localStorage.setItem('busSystem-mediaSource', 'server'); 
+                localStorage.setItem('busSystem-videoName', file.name);
+                localStorage.removeItem('busSystem-embedCode');
+                localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
+                loadMediaStatus(); 
+                sendFullStateUpdate();
+            } else {
+                // Errore 500 o altro errore dal server (es. disco pieno)
+                try {
+                    const errorData = await response.json();
+                    alert('Errore caricamento: ' + (errorData.error || 'Errore server sconosciuto'));
+                } catch(e) {
+                    alert('Errore grave durante il caricamento del video.');
+                }
+            }
+        }
+        // --- FINE GESTIONE ---
+        
         importVideoBtn.disabled = false; importVideoBtn.textContent = 'Importa Video Locale';
+        videoImporter.value = ''; // Resetta l'input file per permettere di ricaricare lo stesso file
     }
     async function handleEmbedImport() {
         const rawCode = embedCodeInput.value.trim();
@@ -1161,7 +1187,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO) ---
+# --- VISUALIZZATORE (MODIFICATO con Modale di Errore) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1304,6 +1330,75 @@ VISUALIZZATORE_COMPLETO_HTML = """
         .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+
+        /* === NUOVI STILI PER MODALE ERRORE VIDEO === */
+        #video-error-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #video-error-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .error-modal-content {
+            background: #1D1D1F; /* Stesso colore del pannello di controllo */
+            color: #F5F5F7;
+            padding: 30px 40px;
+            border-radius: 20px;
+            border: 1px solid #3A3A3C;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            transform: scale(0.95) translateY(20px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #video-error-overlay.visible .error-modal-content {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+        .error-modal-content .error-icon {
+            width: 60px; height: 60px;
+            background-color: rgba(255, 69, 58, 0.15);
+            color: #FF453A; /* Colore Danger */
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 20px auto;
+        }
+        .error-modal-content .error-icon svg { width: 32px; height: 32px; }
+        .error-modal-content h2 {
+            font-size: 24px; font-weight: 700; margin: 0 0 10px 0;
+        }
+        .error-modal-content p {
+            font-size: 16px; color: #86868B; margin: 0 0 25px 0;
+        }
+        .error-modal-content button {
+            width: 100%;
+            background: #0A84FF; /* Colore Blue */
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+        .error-modal-content button:hover {
+            filter: brightness(1.1);
+        }
+        /* === FINE STILI MODALE === */
     </style>
 </head>
 <body>
@@ -1342,13 +1437,26 @@ VISUALIZZATORE_COMPLETO_HTML = """
         </div>
     </div>
 
-<script>
+    <div id="video-error-overlay">
+        <div class="error-modal-content">
+            <div class="error-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
+            </div>
+            <h2>Errore Caricamento</h2>
+            <p>Si è verificato un problema durante il caricamento del video. Il contenuto potrebbe essere danneggiato o non supportato.</p>
+            <button id="close-error-modal-btn">Chiudi</button>
+        </div>
+    </div>
+    <script>
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
     const announcementSound = document.getElementById('announcement-sound');
     const stopAnnouncementSound = document.getElementById('stop-announcement-sound'); // Nuovo selettore
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
+    
+    // --- NUOVO SELETTORE PER MODALE ERRORE ---
+    const videoErrorOverlay = document.getElementById('video-error-overlay');
 
     const IMG_DEFAULT = 'https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg';
     const IMG_NOT_AVAILABLE = 'https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg';
@@ -1357,6 +1465,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastKnownState = {};
     let currentMediaState = null;
     let mediaTimeout = null;
+
+    // --- NUOVO LISTENER PER CHIUDERE IL MODALE ---
+    if (videoErrorOverlay) {
+        document.getElementById('close-error-modal-btn').addEventListener('click', () => {
+            videoErrorOverlay.classList.remove('visible');
+        });
+    }
     
     function applyMediaPlaybackState(state) {
         const videoEl = document.getElementById('ad-video');
@@ -1409,9 +1524,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 
                 videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
+                
+                // --- GESTIONE ERRORE MODIFICATA ---
                 videoEl.onerror = () => {
                     console.error("Errore caricamento video locale.");
-                    loadMedia('error', stateToApply);
+                    loadMedia('error', stateToApply); // Chiama il nuovo stato 'error'
                 };
             }
         }, 600);
@@ -1463,16 +1580,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 showMediaContent(contentHtml, state);
                 break;
                 
+            // --- NUOVA GESTIONE 'error' ---
             case 'error':
-                console.log("Stato errore: mostro 'Non Disponibile' per 10s");
-                contentHtml = `<img src="${IMG_NOT_AVAILABLE}" class="placeholder-image" alt="Errore nel caricamento">`;
+                console.log("Stato errore: mostro modale di errore.");
+                // Invece di mostrare l'immagine 404 per 10s,
+                // mostriamo l'immagine DI DEFAULT e apriamo il modale.
+                
+                // 1. Mostra il placeholder di default
+                contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
                 showMediaContent(contentHtml, state);
                 
-                mediaTimeout = setTimeout(() => {
-                    if (currentMediaState === 'error') {
-                        loadMedia('default', state);
-                    }
-                }, 10000);
+                // 2. Apri il modale di errore
+                if (videoErrorOverlay) {
+                    videoErrorOverlay.classList.add('visible');
+                }
+                
+                // Rimuoviamo il vecchio timeout di 10 secondi
+                if (mediaTimeout) clearTimeout(mediaTimeout);
                 break;
         }
     }
@@ -1681,7 +1805,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 # -------------------------------------------------------------------
-# 4. ROUTE E API WEBSOCKET (Invariato nel funzionamento, modificato lo streaming)
+# 4. ROUTE E API WEBSOCKET (MODIFICATO)
 # -------------------------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1743,6 +1867,7 @@ def dashboard():
 @app.route('/visualizzatore')
 @login_required
 def pagina_visualizzatore():
+    # Passiamo il template modificato
     return render_template_string(VISUALIZZATORE_COMPLETO_HTML)
 
 @app.route('/announcement-audio')
@@ -1770,65 +1895,70 @@ def upload_video():
     if 'video' not in request.files: return jsonify({'error': 'Nessun file inviato'}), 400
     file = request.files['video']
     if file.filename == '': return jsonify({'error': 'Nessun file selezionato'}), 400
-    current_video_file = {'data': file.read(), 'mimetype': file.mimetype, 'name': file.filename}
-    return jsonify({'success': True, 'filename': file.filename})
+    
+    # --- MODIFICA: Salva su disco, non in memoria ---
+    # 1. Rimuovi il vecchio video se esiste
+    if current_video_file['path'] and os.path.exists(current_video_file['path']):
+        try:
+            os.remove(current_video_file['path'])
+        except Exception as e:
+            print(f"Errore rimozione vecchio file: {e}")
+
+    # 2. Salva il nuovo file in una directory temporanea
+    try:
+        # Crea un nome file temporaneo sicuro
+        temp_dir = tempfile.gettempdir()
+        # Usiamo mkstemp per avere un nome unico, poi lo chiudiamo e usiamo il path
+        fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix=f"_{file.filename}")
+        os.close(fd) # Chiudiamo il file descriptor, useremo solo il path
+        
+        file.save(temp_path) # Salva il file in quel path
+        
+        current_video_file = {'path': temp_path, 'mimetype': file.mimetype, 'name': file.filename}
+        print(f"Video salvato in: {temp_path}")
+        return jsonify({'success': True, 'filename': file.filename})
+
+    except Exception as e:
+        print(f"Errore salvataggio file: {e}")
+        return jsonify({'error': 'Errore salvataggio file su server'}), 500
+    # --- FINE MODIFICA ---
 
 @app.route('/stream-video')
 @login_required
 def stream_video():
-    # --- MODIFICA CHIAVE PER STREAMING ROBUSTO ---
-    if not current_video_file or not current_video_file['data']:
+    # --- MODIFICA CHIAVE PER STREAMING DA DISCO ---
+    # Il codice precedente (lettura da memoria con gestione manuale del Range) 
+    # è stato sostituito da send_file, che è molto più robusto.
+    if not current_video_file or not current_video_file['path'] or not os.path.exists(current_video_file['path']):
+        print("Errore stream: file non trovato")
         abort(404)
 
-    video_data = current_video_file['data']
-    mimetype = current_video_file['mimetype']
-    file_size = len(video_data)
-    CHUNK_SIZE = 1024 * 1024 # 1MB chunk size
-    
-    range_header = request.headers.get('Range', None)
-    
-    if range_header:
-        # Gestione richiesta di streaming parziale (status 206)
-        try:
-            # Regex per estrarre il range (es. bytes=0-1023)
-            match = re.match(r'bytes=(\d+)-(\d*)', range_header)
-            if match:
-                byte1 = int(match.group(1))
-                byte2_str = match.group(2)
-                byte2 = int(byte2_str) if byte2_str else file_size - 1
-                
-                if byte2 >= file_size: byte2 = file_size - 1
-                length = byte2 - byte1 + 1
-                
-                # Funzione generatrice per l'invio del chunk richiesto
-                def get_chunk():
-                    yield video_data[byte1:byte2 + 1]
-
-                resp = Response(get_chunk(), 206, mimetype=mimetype)
-                resp.headers.add('Content-Range', 'bytes {0}-{1}/{2}'.format(byte1, byte2, file_size))
-                resp.headers.add('Accept-Ranges', 'bytes')
-                resp.headers.add('Content-Length', str(length))
-                return resp
-
-        except Exception as e:
-            print(f"Errore gestione Range: {e}")
-            pass # Fallback all'invio completo
-            
-    # Invio del file completo (status 200 - fallback o prima richiesta)
-    def generate_full():
-        for i in range(0, file_size, CHUNK_SIZE):
-            yield video_data[i:i + CHUNK_SIZE]
-            
-    resp = Response(generate_full(), 200, mimetype=mimetype)
-    resp.headers.add('Content-Length', str(file_size))
-    return resp
-    # --- FINE MODIFICA CHIAVE ---
+    try:
+        # send_file gestisce automaticamente i 'Range headers' (206 Partial Content)
+        # consentendo lo streaming e il seeking di file di grandi dimensioni.
+        return send_file(
+            current_video_file['path'], 
+            mimetype=current_video_file['mimetype'], 
+            as_attachment=False # Importante per il player video
+        )
+    except Exception as e:
+        print(f"Errore durante lo streaming del file: {e}")
+        abort(500)
+    # --- FINE MODIFICA ---
 
 @app.route('/clear-video', methods=['POST'])
 @login_required
 def clear_video():
     global current_video_file
-    current_video_file = {'data': None, 'mimetype': None, 'name': None}
+    # --- MODIFICA: Rimuovi file da disco ---
+    if current_video_file['path'] and os.path.exists(current_video_file['path']):
+        try:
+            os.remove(current_video_file['path'])
+            print(f"File rimosso: {current_video_file['path']}")
+        except Exception as e:
+            print(f"Errore rimozione file: {e}")
+    # --- FINE MODIFICA ---
+    current_video_file = {'path': None, 'mimetype': None, 'name': None}
     return jsonify({'success': True})
 
 # --- GESTIONE WEBSOCKET (Invariato) ---
@@ -1865,7 +1995,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v16 (STREAMING ROBUSTO E AUDIO SOLO VISUALIZZATORE)")
+    print("   SERVER HARZAFI v17 (STREAMING DA DISCO E MODALE ERRORE)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
