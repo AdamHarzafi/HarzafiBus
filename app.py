@@ -1,31 +1,22 @@
 import sys
 import socket
 import re 
-import os
-import tempfile
+import os # Importato per gestire i file
+import tempfile # Importato per gestire i file temporanei
 from functools import wraps
 from datetime import datetime, timedelta
-import locale
 from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash, send_file
 from flask_socketio import SocketIO
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+# IMPORTANTE: Assicurati di aver installato Flask-WTF con "pip install Flask-WTF"
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField
 from wtforms.validators import DataRequired
 
 # -------------------------------------------------------------------
-# CONFIGURAZIONE
+# SEZIONE CONFIGURAZIONE SICUREZZA POTENZIATA E LOGIN
 # -------------------------------------------------------------------
-
-# Tentativo di impostare il locale italiano per le date
-try:
-    locale.setlocale(locale.LC_TIME, 'it_IT.utf8')
-except:
-    try:
-        locale.setlocale(locale.LC_TIME, 'it_IT')
-    except:
-        pass # Fallback al default di sistema se italiano non disponibile
 
 SECRET_KEY_FLASK = "questa-chiave-e-stata-cambiata-ed-e-molto-piu-sicura-del-2025"
 
@@ -55,7 +46,7 @@ class LoginForm(FlaskForm):
     password = PasswordField('Password', validators=[DataRequired("La password è obbligatoria.")])
 
 # -------------------------------------------------------------------
-# 1. APP INIT
+# 1. IMPOSTAZIONI E APPLICAZIONE
 # -------------------------------------------------------------------
 
 app = Flask(__name__)
@@ -66,7 +57,7 @@ socketio = SocketIO(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-login_manager.login_message = "Per favore, effettua il login."
+login_manager.login_message = "Per favore, effettua il login per accedere a questa pagina."
 login_manager.login_message_category = "error"
 
 @login_manager.user_loader
@@ -75,6 +66,10 @@ def load_user(user_id):
 
 @app.after_request
 def add_security_headers(response):
+    # QUESTA FUNZIONE (già presente) è CORRETTA.
+    # Impedisce al browser di salvare le pagine nella cache.
+    # Se l'utente preme "Indietro", il browser è costretto a 
+    # richiedere la pagina al server, che verificherà di nuovo il login.
     if request.path != '/login' and not request.path.startswith('/static'):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
@@ -95,8 +90,9 @@ def get_local_ip():
     return IP
 
 # -------------------------------------------------------------------
-# 2. STATO GLOBALE
+# 2. STATO GLOBALE DELL'APPLICAZIONE
 # -------------------------------------------------------------------
+# Stato predefinito per evitare schermata vuota all'avvio
 current_app_state = {
     "linesData": {},
     "currentLineKey": None,
@@ -109,18 +105,20 @@ current_app_state = {
     "playbackState": "playing",
     "seekAction": None,
     "infoMessages": [],
-    "serviceStatus": "online",
-    "videoNotAvailable": False,
+    "serviceStatus": "online", # Default 'online'
+    "videoNotAvailable": False, # Default 'false'
     "announcement": None,
     "stopRequested": None
 }
+# --- MODIFICA: Salviamo il PERCORSO del file, non i dati in memoria ---
 current_video_file = {'path': None, 'mimetype': None, 'name': None}
+# --- FINE MODIFICA ---
 
 # -------------------------------------------------------------------
-# 3. TEMPLATES
+# 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
 # -------------------------------------------------------------------
 
-# --- LOGIN (INVARIATO) ---
+# --- PAGINA DI LOGIN (FUNZIONANTE) ---
 LOGIN_PAGE_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -132,40 +130,113 @@ LOGIN_PAGE_HTML = """
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        :root { --bg-start: #111827; --bg-end: #1F2937; --accent: #A244A7; --text: #F9FAFB; }
-        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, var(--bg-start), var(--bg-end)); color: var(--text); display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-        .login-container { width: 100%; max-width: 420px; background: rgba(31, 41, 55, 0.8); padding: 40px; border-radius: 24px; border: 1px solid rgba(107, 114, 128, 0.2); backdrop-filter: blur(10px); text-align: center; }
-        .logo { max-width: 150px; margin-bottom: 24px; }
-        input { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 12px; border: 1px solid #374151; background: #111827; color: white; box-sizing: border-box;}
-        button { width: 100%; padding: 15px; background: var(--accent); color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; }
-        .flash-message { padding: 10px; margin-bottom: 20px; border-radius: 8px; background: rgba(239, 68, 68, 0.2); color: #EF4444; }
+        :root {
+            --background-start: #111827; --background-end: #1F2937;
+            --card-background: rgba(31, 41, 55, 0.8); --border-color: rgba(107, 114, 128, 0.2);
+            --accent-color-start: #8A2387; --accent-color-end: #A244A7;
+            --text-primary: #F9FAFB; --text-secondary: #9CA3AF; --danger-color: #EF4444;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif; background: linear-gradient(135deg, var(--background-start), var(--background-end));
+            color: var(--text-primary); display: flex; align-items: center; justify-content: center;
+            min-height: 100vh; margin: 0; padding: 20px;
+        }
+        .login-container {
+            width: 100%; max-width: 420px; background: var(--card-background);
+            border: 1px solid var(--border-color); padding: 40px; border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4); backdrop-filter: blur(10px);
+            text-align: center; animation: fadeIn 0.5s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .logo { max-width: 150px; margin-bottom: 24px; filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.1)); }
+        h2 { color: var(--text-primary); font-weight: 700; font-size: 24px; margin: 0 0 32px 0; }
+        .flash-message {
+            padding: 12px 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid; font-weight: 600;
+            display: flex; align-items: center; gap: 10px; animation: slideIn .3s ease-out;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .flash-message.error {
+            background-color: rgba(239, 68, 68, 0.1); color: var(--danger-color); border-color: rgba(239, 68, 68, 0.3);
+        }
+        .form-group { margin-bottom: 20px; text-align: left; position: relative; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-secondary); font-size: 14px; }
+        input {
+            width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border-color);
+            background-color: #111827; color: var(--text-primary); font-size: 16px; font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus { outline: none; border-color: var(--accent-color-end); box-shadow: 0 0 0 4px rgba(162, 68, 167, 0.2); }
+        input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111827 inset !important; -webkit-text-fill-color: var(--text-primary) !important;}
+        .password-wrapper { position: relative; }
+        #password-toggle {
+            position: absolute; top: 50%; right: 14px; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; padding: 5px; color: var(--text-secondary);
+        }
+        #password-toggle svg { width: 20px; height: 20px; }
+        button[type="submit"] {
+            width: 100%; padding: 15px; border: none; background: linear-gradient(135deg, var(--accent-color-end), var(--accent-color-start));
+            color: white; font-size: 16px; font-weight: 700; border-radius: 12px; cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button[type="submit"]:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(138, 35, 135, 0.25); }
+        button[type="submit"]:disabled { background: #4B5563; cursor: not-allowed; transform: none; box-shadow: none; }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo" class="logo">
-        <h2>Area Riservata</h2>
+        <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
+        <h2>Accesso Area Riservata</h2>
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="flash-message">{{ message }}</div>
+                    <div class="flash-message {{ category }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
+                        <span>{{ message }}</span>
+                    </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        <form method="post">
+        <form method="post" novalidate>
             {{ form.hidden_tag() }}
-            {{ form.username(placeholder="Username") }}
-            {{ form.password(placeholder="Password") }}
+            <div class="form-group">
+                {{ form.username.label(for="username") }}
+                {{ form.username(id="username", class="form-control", required=True) }}
+            </div>
+            <div class="form-group">
+                {{ form.password.label(for="password") }}
+                <div class="password-wrapper">
+                    {{ form.password(id="password", class="form-control", required=True) }}
+                    <button type="button" id="password-toggle" title="Mostra/Nascondi password">
+                        <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 4C7 4 2.73 7.11 1 11.5 2.73 15.89 7 19 12 19s9.27-3.11 11-7.5C21.27 7.11 17 4 12 4zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49 .2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75.99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67 .24-1.38 .37-2.14 .37-2.76 0-5-2.24-5-5 0-.76 .13-1.47 .37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
+                    </button>
+                </div>
+            </div>
             <button type="submit">Accedi</button>
         </form>
     </div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const passwordInput = document.getElementById('password');
+        const toggleButton = document.getElementById('password-toggle');
+        const eyeOpen = document.getElementById('eye-open');
+        const eyeClosed = document.getElementById('eye-closed');
+        if (toggleButton) {
+            toggleButton.addEventListener('click', () => {
+                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passwordInput.setAttribute('type', type);
+                eyeOpen.style.display = type === 'password' ? 'block' : 'none';
+                eyeClosed.style.display = type === 'password' ? 'none' : 'block';
+            });
+        }
+    });
+</script>
 </body>
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (INVARIATO) ---
-# Nota: Utilizzo lo stesso HTML fornito precedentemente per il pannello, 
-# poiché le modifiche richieste riguardano solo il visualizzatore.
+# --- PANNELLO DI CONTROLLO (MODIFICATO) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -174,6 +245,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pannello di Controllo Harzafi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
@@ -184,110 +256,322 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             --danger: #FF453A; --blue: #0A84FF;
         }
         * { box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: var(--background); color: var(--text-primary); margin: 0; padding: 20px; }
+        ::selection { background-color: var(--accent-primary); color: var(--text-primary); }
+        body {
+            font-family: 'Inter', sans-serif; background: var(--background); color: var(--text-primary);
+            margin: 0; padding: 20px; overflow-y: scroll;
+        }
         .main-container { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
-        .main-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--border-color); }
-        .header-title img { max-width: 100px; vertical-align: middle; margin-right: 15px; }
-        .header-title h1 { display: inline; font-size: 24px; }
-        .btn { padding: 8px 16px; border-radius: 99px; font-weight: 600; cursor: pointer; text-decoration: none; border: none; display: inline-block;}
-        .btn-viewer { background: var(--blue); color: white; }
-        .control-section { background: var(--content-background); padding: 30px; border-radius: 20px; }
+        .main-header {
+            display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+            gap: 20px; padding: 20px 0; border-bottom: 1px solid var(--border-color);
+        }
+        .header-title { display: flex; align-items: center; gap: 15px; }
+        .header-title img { max-width: 100px; }
+        .header-title h1 { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -0.5px; }
+        .header-actions { display: flex; align-items: center; gap: 15px; }
+        .btn {
+            padding: 8px 16px; border-radius: 99px; font-weight: 600; cursor: pointer;
+            text-decoration: none; display: inline-block;
+            transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        .btn-viewer { background: var(--blue); color: white; border: 1px solid var(--blue); }
+        .btn-viewer:hover { filter: brightness(1.1); }
+        #logout-btn { background: var(--content-background); color: var(--danger); border: 1px solid var(--border-color); }
+        #logout-btn:hover { background: var(--danger); color: white; border-color: var(--danger); }
+        .control-section {
+            background: var(--content-background); padding: 30px; border-radius: 20px;
+            animation: fadeIn 0.5s ease-out forwards; opacity: 0;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .control-section h2 { font-size: 22px; font-weight: 600; margin: 0 0 10px 0; letter-spacing: -0.5px; }
+        .control-section .subtitle { font-size: 16px; color: var(--text-secondary); margin: -5px 0 25px 0; max-width: 600px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; }
-        label { display: block; margin-bottom: 10px; color: var(--text-secondary); }
-        select, input[type="text"], textarea { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--content-background-light); color: white; }
-        button { padding: 12px; border-radius: 12px; border: none; font-weight: 600; cursor: pointer; width: 100%; }
-        .btn-primary { background: var(--blue); color: white; }
-        .btn-secondary { background: var(--content-background-light); color: white; border: 1px solid var(--border-color); }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn-success { background: var(--success); color: white; }
-        #status-card { background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary)); padding: 25px; border-radius: 16px; }
-        .line-item { display: flex; justify-content: space-between; padding: 12px; background: var(--content-background-light); margin-bottom: 5px; border-radius: 8px; }
-        dialog { background: var(--background); color: white; border: 1px solid var(--border-color); border-radius: 20px; padding: 30px; width: 90%; max-width: 500px; }
-        .stop-item { display: flex; gap: 10px; margin-bottom: 10px; }
-        .audio-upload-btn { width: 40px !important; border-radius: 50% !important; padding: 0 !important; display: flex; align-items: center; justify-content: center; }
-        .audio-upload-btn.status-green { background: var(--success); } .audio-upload-btn.status-red { background: var(--danger); }
-        .audio-upload-btn svg { width: 20px; height: 20px; fill: white; }
-        .media-controls { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
-        .media-controls button { width: 40px; }
+        .control-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 10px; font-weight: 500; color: var(--text-secondary); font-size: 14px; }
+        select, button, input[type="text"], textarea {
+            width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-color);
+            font-size: 15px; box-sizing: border-box; font-family: 'Inter', sans-serif;
+            background-color: var(--content-background-light); color: var(--text-primary);
+            transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        textarea { min-height: 100px; resize: vertical; }
+        select:focus, input:focus, textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3); }
+        button { cursor: pointer; border: none; font-weight: 600; border-radius: 12px; }
+        button:disabled { background: #3A3A3C; color: #86868B; cursor: not-allowed; transform: none !important; }
+        button:not(:disabled):hover { filter: brightness(1.1); }
+        button:not(:disabled):active { transform: scale(0.98); }
+        .btn-primary { background: var(--blue); color: var(--text-primary); }
+        .btn-success { background: var(--success); color: var(--text-primary); }
+        .btn-danger { background: var(--danger); color: var(--text-primary); }
+        .btn-secondary { background: var(--content-background-light); color: var(--text-primary); border: 1px solid var(--border-color); }
+        #status-card {
+            background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary)); padding: 25px;
+            border-radius: 16px; color: var(--white);
+        }
+        #status-card h3 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; }
+        #status-stop-name { font-size: 32px; font-weight: 700; margin: 0; line-height: 1.1; letter-spacing: -1px; }
+        #status-stop-subtitle { font-size: 16px; opacity: 0.9; margin: 4px 0 0 0; }
+        .status-details-grid { display: flex; gap: 20px; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px; }
+        .status-detail { font-size: 14px; }
+        #status-progress { font-weight: 600; }
+        .line-list { list-style: none; padding: 0; margin: 0; }
+        .line-item { display: flex; align-items: center; justify-content: space-between; padding: 12px; border-radius: 12px; transition: background-color 0.2s; }
+        .line-item:not(:last-child) { margin-bottom: 5px; }
+        .line-item:hover { background-color: var(--content-background-light); }
+        .line-actions { display: flex; gap: 10px; }
+        .line-actions button { width: auto; padding: 6px 12px; font-size: 13px; }
+        dialog {
+            width: 95%; max-width: 500px; border-radius: 20px; border: 1px solid var(--border-color);
+            background: var(--background); color: var(--text-primary);
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); padding: 30px;
+            animation: dialog-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        dialog::backdrop { background-color: rgba(0,0,0,0.7); backdrop-filter: blur(8px); animation: backdrop-in 0.3s ease; }
+        @keyframes dialog-in { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--content-background-light); transition: .4s; border-radius: 28px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 22px; width: 22px; left: 3px; bottom: 3px;
+            background-color: white; transition: .4s cubic-bezier(0.16, 1, 0.3, 1); border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--success); }
+        input:checked + .slider:before { transform: translateX(22px); }
+        .media-controls { display: flex; gap: 10px; align-items: center; }
+        .media-controls button { width: 44px; height: 44px; padding: 0; font-size: 16px; flex-shrink: 0; }
+        .volume-container { display: flex; align-items: center; background-color: #3A3A3C; border-radius: 12px; padding: 0 15px; flex-grow: 1; height: 44px; }
+        #volume-slider { width: 100%; padding: 0; margin-left: 10px; background: transparent; border: none; }
+        #volume-slider:focus { box-shadow: none; }
+        input[type=range] { -webkit-appearance: none; background: transparent; cursor: pointer; }
+        input[type=range]::-webkit-slider-runnable-track { height: 4px; background: var(--border-color); border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--text-primary); border-radius: 50%; border: none; }
+        #media-controls-container.disabled { opacity: 0.4; pointer-events: none; }
+
+        .preview-wrapper {
+            max-width: 720px;
+            margin: 0 auto 20px auto;
+        }
+        .viewer-preview-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* Aspect Ratio 16:9 */
+            background-color: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .viewer-preview-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+        .preview-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .preview-controls .btn {
+            width: auto;
+            flex-shrink: 0;
+        }
+        
+        /* === NUOVI STILI PER EDITOR FERMATE === */
+        .stop-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+        .stop-inputs { flex-grow: 1; display: flex; gap: 10px; }
+        .stop-inputs input { width: 100%; }
+        .audio-upload-btn {
+            width: 40px !important; /* Sovrascrive .btn */
+            height: 40px;
+            padding: 8px !important;
+            flex-shrink: 0;
+            border-radius: 50% !important;
+            line-height: 1;
+            border: 2px solid;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .audio-upload-btn.status-red {
+            background-color: var(--danger);
+            border-color: rgba(255,255,255,0.3);
+            color: white;
+        }
+        .audio-upload-btn.status-green {
+            background-color: var(--success);
+            border-color: rgba(255,255,255,0.3);
+            color: white;
+        }
+        .audio-upload-btn svg { width: 20px; height: 20px; }
+        .remove-stop-btn {
+            width: 40px !important;
+            height: 40px;
+            padding: 8px !important;
+            flex-shrink: 0;
+        }
+        /* === FINE NUOVI STILI === */
     </style>
 </head>
 <body>
     <div class="main-container">
         <header class="main-header">
-            <div class="header-title"><img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png"><h1>Pannello</h1></div>
-            <div><a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-viewer">Visualizzatore</a> <a href="{{ url_for('logout') }}" class="btn btn-danger">Esci</a></div>
+            <div class="header-title">
+                <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi">
+                <h1>Pannello</h1>
+            </div>
+            <div class="header-actions">
+                <a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-viewer">Apri Visualizzatore</a>
+                <a href="{{ url_for('logout') }}"><button id="logout-btn" class="btn">Logout</button></a>
+            </div>
         </header>
 
         <section class="control-section">
-            <div class="grid">
+            <div class="grid" style="align-items: center;">
                 <div>
-                    <h2>Stato</h2>
-                    <div id="status-card">
-                        <h3>Fermata Attuale (<span id="status-progress">--/--</span>)</h3>
-                        <h1 id="status-stop-name" style="margin: 10px 0;">--</h1>
-                        <p id="status-stop-subtitle">--</p>
-                    </div>
+                    <h2>Stato Attuale</h2>
+                    <p class="subtitle">Monitora e naviga la linea attiva in tempo reale.</p>
                 </div>
-                <div>
-                    <h2>Controlli</h2>
-                    <label>Linea</label><select id="line-selector"></select>
-                    <div style="display:flex; gap:10px; margin-top:15px;">
-                        <button id="prev-btn" class="btn-secondary">← Indietro</button>
-                        <button id="next-btn" class="btn-secondary">Avanti →</button>
+                <div id="status-card">
+                    <h3>Stato Attuale (<span id="status-progress">--/--</span>)</h3>
+                    <h4 id="status-stop-name">Nessuna fermata</h4>
+                    <p id="status-stop-subtitle">Selezionare una linea</p>
+                    <div class="status-details-grid">
+                        <div class="status-detail"><strong>Linea:</strong> <span id="status-line-name">N/D</span></div>
+                        <div class="status-detail"><strong>Dest.:</strong> <span id="status-line-direction">N/D</span></div>
                     </div>
-                    <button id="announce-btn" class="btn-primary" style="margin-top:15px;">Annuncia Linea</button>
-                    <button id="booked-btn" class="btn-primary" style="margin-top:15px;">Prenota Fermata</button>
                 </div>
             </div>
         </section>
 
         <section class="control-section">
-            <h2>Media & Messaggi</h2>
+            <h2>Controlli Principali</h2>
+            <p class="subtitle">Modifica la linea, naviga tra le fermate e gestisci lo stato del servizio.</p>
             <div class="grid">
-                <div>
-                    <label>Video Locale</label>
-                    <input type="file" id="video-importer" accept="video/*" style="display:none;">
-                    <button id="import-video-btn" class="btn-secondary">Carica Video</button>
-                    <button id="remove-media-btn" class="btn-danger" style="margin-top:10px; display:none;">Rimuovi</button>
-                    <p id="media-upload-status" style="font-size:12px; color:#888; margin-top:5px;"></p>
-                    <div class="media-controls" id="media-controls-container">
-                        <button id="seek-back-btn" class="btn-secondary">«</button>
-                        <button id="play-pause-btn" class="btn-secondary">▶</button>
-                        <button id="seek-fwd-btn" class="btn-secondary">»</button>
-                        <input type="range" id="volume-slider" min="0" max="1" step="0.1" value="1" style="flex-grow:1;">
-                    </div>
-                    <div style="margin-top: 15px; display: flex; align-items: center; justify-content: space-between; background: var(--content-background-light); padding: 10px; border-radius: 8px;">
-                        <span>Video "Non Disponibile"</span>
-                        <input type="checkbox" id="video-not-available-toggle">
+                 <div class="control-group">
+                    <label for="line-selector">Linea Attiva</label>
+                    <select id="line-selector"></select>
+                </div>
+                <div class="control-group">
+                    <label>Navigazione Fermate</label>
+                    <div style="display: flex; gap: 15px;">
+                        <button id="prev-btn" class="btn-secondary" style="font-size: 20px;">←</button>
+                        <button id="next-btn" class="btn-secondary" style="font-size: 20px;">→</button>
                     </div>
                 </div>
-                <div>
-                    <label>Messaggi Scorrevoli</label>
-                    <textarea id="info-messages-input" rows="5"></textarea>
-                    <button id="save-messages-btn" class="btn-primary" style="margin-top:10px;">Salva Messaggi</button>
+                <div class="control-group">
+                     <label>Stato del Servizio</label>
+                     <div style="display: flex; align-items: center; justify-content: space-between; background-color: var(--content-background-light); padding: 10px 15px; border-radius: 12px;">
+                        <span id="service-status-text" style="font-weight: 600;">Caricamento...</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="service-status-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label>Annuncio Vocale</label>
+                    <button id="announce-btn" title="Annuncia" class="btn-primary" style="padding: 12px;">ANNUNCIA LINEA.</button>
+                </div>
+                
+                <div class="control-group">
+                    <label>Prenotazione Fermata</label>
+                    <button id="booked-btn" class="btn-primary" style="padding: 12px;">PRENOTA FERMATA</button>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="control-section">
+            <h2>Anteprima Interattiva</h2>
+            <p class="subtitle">Questa è un'anteprima live e interattiva. Puoi cliccare e interagire direttamente con gli elementi al suo interno.</p>
+            <div class="preview-wrapper">
+                <div class="viewer-preview-container">
+                    <iframe id="viewer-iframe-preview" src="{{ url_for('pagina_visualizzatore') }}" frameborder="0"></iframe>
                 </div>
             </div>
+            <div class="preview-controls">
+                <button id="toggle-preview-playback-btn" class="btn btn-secondary">▶ Riproduci in anteprima</button>
+                <a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-secondary">Apri in Schermo Intero</a>
+            </div>
+        </section>
+        <section class="control-section">
+            <h2>Gestione Media e Messaggi</h2>
+             <p class="subtitle">Carica contenuti video, controlla la riproduzione o imposta messaggi a scorrimento.</p>
+             <div class="grid">
+                 <div>
+                    <label for="embed-code-input">Codice Embed (iframe)</label>
+                    <textarea id="embed-code-input" placeholder="Incolla qui il codice <iframe>..."></textarea>
+                    <button id="import-embed-btn" class="btn-secondary" style="margin-top: 10px;">Imposta da Embed</button>
+                    <hr style="border-color: var(--border-color); margin: 20px 0;">
+                    <input type="file" id="video-importer" accept="video/*" style="display: none;">
+                    <button id="import-video-btn" class="btn-secondary">Importa Video Locale</button>
+                    <p id="media-upload-status" style="font-size: 14px; color: var(--text-secondary); margin-top: 15px;">Nessun media caricato.</p>
+                    <button id="remove-media-btn" class="btn-danger" style="display: none; width: auto; padding: 8px 15px; font-size: 13px;">Rimuovi Media</button>
+                 </div>
+                 <div>
+                     <label for="info-messages-input">Messaggi a scorrimento (uno per riga)</label>
+                     <textarea id="info-messages-input" placeholder="Benvenuti a bordo..."></textarea>
+                     <button id="save-messages-btn" class="btn-primary" style="margin-top: 10px;">Salva Messaggi</button>
+                 </div>
+                 <div>
+                    <label>Controlli Riproduzione (Globale)</label>
+                    <div id="media-controls-container" class="media-controls">
+                        <button id="seek-back-btn" class="btn-secondary" title="Indietro 5s">«</button>
+                        <button id="play-pause-btn" class="btn-secondary" title="Play/Pausa">▶</button>
+                        <button id="seek-fwd-btn" class="btn-secondary" title="Avanti 5s">»</button>
+                        <div class="volume-container">
+                            <span id="volume-icon">🔊</span>
+                            <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" title="Volume">
+                        </div>
+                    </div>
+                 </div>
+                 <div>
+                    <label>Modalità "Video Non Disponibile"</label>
+                     <div style="display: flex; align-items: center; justify-content: space-between; background-color: var(--content-background-light); padding: 10px 15px; border-radius: 12px;">
+                        <span id="video-not-available-status-text" style="font-weight: 600;">Disattivato</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="video-not-available-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <p style="font-size: 13px; color: var(--text-secondary); margin-top: 10px;">Forza la visualizzazione di un'immagine "non disponibile" sul viewer.</p>
+                 </div>
+             </div>
         </section>
 
         <section class="control-section">
             <h2>Gestione Linee</h2>
-            <div id="line-management-list"></div>
-            <button id="add-new-line-btn" class="btn-success" style="margin-top:20px;">+ Nuova Linea</button>
-            <button id="reset-data-btn" class="btn-danger" style="margin-top:10px;">Reset Totale</button>
+            <p class="subtitle">Crea, modifica o elimina le linee e le relative fermate.</p>
+            <ul id="line-management-list" class="line-list"></ul>
+            <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                 <button id="add-new-line-btn" class="btn-success" style="flex-grow: 1;">+ Aggiungi Nuova Linea</button>
+                 <button id="reset-data-btn" class="btn-danger" style="flex-grow: 1;">Reset Dati Predefiniti</button>
+            </div>
         </section>
     </div>
 
     <dialog id="line-editor-modal">
-        <h2 id="modal-title">Editor Linea</h2>
+        <h2 id="modal-title" style="margin-bottom: 25px;">Editor Linea</h2>
         <form id="line-editor-form">
             <input type="hidden" id="edit-line-id">
-            <label>Nome Linea</label><input type="text" id="line-name" required>
-            <label style="margin-top:10px;">Destinazione</label><input type="text" id="line-direction" required>
-            <div id="stops-list" style="max-height:300px; overflow-y:auto; margin-top:15px;"></div>
-            <button type="button" id="add-stop-btn" class="btn-secondary" style="margin-top:10px;">+ Aggiungi Fermata</button>
-            <div style="display:flex; gap:10px; margin-top:20px;">
+            <div class="control-group"><label for="line-name">Nome Linea</label><input type="text" id="line-name" required></div>
+            <div class="control-group"><label for="line-direction">Destinazione</label><input type="text" id="line-direction" required></div>
+            <div id="stops-editor">
+                <label>Fermate (Nome, Sottotitolo, Audio)</label>
+                <div id="stops-list" style="max-height: 250px; overflow-y: auto; padding-right: 10px;"></div>
+                <button type="button" id="add-stop-btn" class="btn-secondary" style="margin-top: 10px; width: 100%;">+ Aggiungi Fermata</button>
+            </div>
+            <div class="modal-actions">
                 <button type="button" id="cancel-btn" class="btn-secondary">Annulla</button>
-                <button type="submit" class="btn-primary">Salva</button>
+                <button type="submit" class="btn-primary">Salva Modifiche</button>
             </div>
         </form>
     </dialog>
@@ -295,651 +579,1279 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
-    let linesData = {}, currentLineKey = null, currentStopIndex = 0;
 
-    // Elementi DOM (Mapping essenziale)
-    const els = {
-        lineSelector: document.getElementById('line-selector'),
-        statusStop: document.getElementById('status-stop-name'),
-        statusSub: document.getElementById('status-stop-subtitle'),
-        statusProg: document.getElementById('status-progress'),
-        prevBtn: document.getElementById('prev-btn'),
-        nextBtn: document.getElementById('next-btn'),
-        announceBtn: document.getElementById('announce-btn'),
-        bookedBtn: document.getElementById('booked-btn'),
-        msgsInput: document.getElementById('info-messages-input'),
-        saveMsgsBtn: document.getElementById('save-messages-btn'),
-        videoInput: document.getElementById('video-importer'),
-        importVidBtn: document.getElementById('import-video-btn'),
-        removeVidBtn: document.getElementById('remove-media-btn'),
-        vidStatus: document.getElementById('media-upload-status'),
-        playPause: document.getElementById('play-pause-btn'),
-        volSlider: document.getElementById('volume-slider'),
-        seekBack: document.getElementById('seek-back-btn'),
-        seekFwd: document.getElementById('seek-fwd-btn'),
-        linesList: document.getElementById('line-management-list'),
-        addStopBtn: document.getElementById('add-stop-btn'),
-        stopsContainer: document.getElementById('stops-list'),
-        modal: document.getElementById('line-editor-modal'),
-        notAvailToggle: document.getElementById('video-not-available-toggle')
-    };
-
-    // Inizializzazione
-    function init() {
-        const stored = localStorage.getItem('busSystem-linesData');
-        if(stored) linesData = JSON.parse(stored);
-        currentLineKey = localStorage.getItem('busSystem-currentLine');
-        currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex') || 0);
-        
-        const msgs = localStorage.getItem('busSystem-infoMessages');
-        els.msgsInput.value = msgs ? JSON.parse(msgs).join('\\n') : "Benvenuti su Harzafi.";
-        
-        els.notAvailToggle.checked = localStorage.getItem('busSystem-videoNotAvailable') === 'true';
-        
-        renderAll();
-        checkMediaStatus();
+    function handleAuthError() {
+        alert("Sessione scaduta o non valida. Verrai reindirizzato alla pagina di login.");
+        window.location.href = "{{ url_for('login') }}";
     }
 
-    function saveData() { 
-        localStorage.setItem('busSystem-linesData', JSON.stringify(linesData));
-        sendUpdate();
+    async function fetchAuthenticated(url, options) {
+        try {
+            const response = await fetch(url, options);
+            if (response.status === 401 || response.redirected) { 
+                handleAuthError();
+                return null;
+            }
+            return response;
+        } catch (error) {
+            console.error("Errore di rete:", error);
+            alert("Errore di connessione con il server.");
+            return null;
+        }
     }
 
-    function sendUpdate() {
-        socket.emit('update_all', {
-            linesData, currentLineKey, currentStopIndex,
-            infoMessages: els.msgsInput.value.split('\\n').filter(x=>x.trim()),
+    function sendFullStateUpdate() {
+        if (!socket.connected) return;
+        const state = {
+            linesData: linesData, currentLineKey: currentLineKey, currentStopIndex: currentStopIndex,
             mediaSource: localStorage.getItem('busSystem-mediaSource'),
+            embedCode: localStorage.getItem('busSystem-embedCode'),
             videoName: localStorage.getItem('busSystem-videoName'),
             mediaLastUpdated: localStorage.getItem('busSystem-mediaLastUpdated'),
-            videoNotAvailable: els.notAvailToggle.checked,
-            volumeLevel: els.volSlider.value,
-            playbackState: localStorage.getItem('busSystem-playbackState') || 'playing'
-        });
+            volumeLevel: localStorage.getItem('busSystem-volumeLevel') || '1.0',
+            playbackState: localStorage.getItem('busSystem-playbackState') || 'playing',
+            seekAction: JSON.parse(localStorage.getItem('busSystem-seekAction') || 'null'),
+            infoMessages: JSON.parse(localStorage.getItem('busSystem-infoMessages') || '[]'),
+            serviceStatus: serviceStatus,
+            videoNotAvailable: videoNotAvailable,
+            announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null'),
+            stopRequested: JSON.parse(localStorage.getItem('busSystem-stopRequested') || 'null')
+        };
+        socket.emit('update_all', state);
+        // Reset one-time actions
+        if (state.announcement) localStorage.removeItem('busSystem-playAnnouncement');
+        if (state.stopRequested) localStorage.removeItem('busSystem-stopRequested');
+        if (state.seekAction) localStorage.removeItem('busSystem-seekAction');
     }
 
-    function renderAll() {
-        els.lineSelector.innerHTML = '';
-        els.linesList.innerHTML = '';
-        
-        Object.keys(linesData).sort().forEach(k => {
-            // Selector
-            const opt = document.createElement('option');
-            opt.value = k; opt.textContent = `${k} -> ${linesData[k].direction}`;
-            els.lineSelector.appendChild(opt);
-            
-            // Management List
-            const div = document.createElement('div'); div.className = 'line-item';
-            div.innerHTML = `<span>${k}</span> <div><button class="btn-secondary edit-btn" data-id="${k}" style="width:auto; margin-right:5px;">Edit</button><button class="btn-danger del-btn" data-id="${k}" style="width:auto;">X</button></div>`;
-            els.linesList.appendChild(div);
-        });
-        
-        if(currentLineKey && linesData[currentLineKey]) els.lineSelector.value = currentLineKey;
-        updateStatusDisplay();
+    const importVideoBtn = document.getElementById('import-video-btn');
+    const videoImporter = document.getElementById('video-importer');
+    const importEmbedBtn = document.getElementById('import-embed-btn');
+    const embedCodeInput = document.getElementById('embed-code-input');
+    const removeMediaBtn = document.getElementById('remove-media-btn');
+    const mediaUploadStatusText = document.getElementById('media-upload-status');
+    const lineSelector = document.getElementById('line-selector');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const announceBtn = document.getElementById('announce-btn');
+    const lineManagementList = document.getElementById('line-management-list');
+    const addNewLineBtn = document.getElementById('add-new-line-btn');
+    const modal = document.getElementById('line-editor-modal');
+    const lineEditorForm = document.getElementById('line-editor-form');
+    const editLineId = document.getElementById('edit-line-id');
+    const lineNameInput = document.getElementById('line-name');
+    const lineDirectionInput = document.getElementById('line-direction');
+    const stopsListContainer = document.getElementById('stops-list');
+    const addStopBtn = document.getElementById('add-stop-btn');
+    const statusLineName = document.getElementById('status-line-name');
+    const statusLineDirection = document.getElementById('status-line-direction');
+    const statusStopName = document.getElementById('status-stop-name');
+    const statusStopSubtitle = document.getElementById('status-stop-subtitle');
+    const statusProgress = document.getElementById('status-progress');
+    const infoMessagesInput = document.getElementById('info-messages-input');
+    const saveMessagesBtn = document.getElementById('save-messages-btn');
+    const serviceStatusToggle = document.getElementById('service-status-toggle');
+    const serviceStatusText = document.getElementById('service-status-text');
+    const resetDataBtn = document.getElementById('reset-data-btn');
+    const bookedBtn = document.getElementById('booked-btn');
+    const videoNotAvailableToggle = document.getElementById('video-not-available-toggle');
+    const videoNotAvailableStatusText = document.getElementById('video-not-available-status-text');
+    const mediaControlsContainer = document.getElementById('media-controls-container');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const volumeSlider = document.getElementById('volume-slider');
+    const volumeIcon = document.getElementById('volume-icon');
+    const seekBackBtn = document.getElementById('seek-back-btn');
+    const seekFwdBtn = document.getElementById('seek-fwd-btn');
+
+    let linesData = {}, currentLineKey = null, currentStopIndex = 0, serviceStatus = 'online';
+    let videoNotAvailable = false;
+    
+    // Icone SVG per i pulsanti audio
+    const iconMicRed = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
+    const iconMicGreen = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
+
+
+    function getDefaultData() {
+        return {
+            "3": { "direction": "CORSA DEVIATA", "stops": [
+                { "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }, 
+                { "name": "PRIMULE", "subtitle": "", "audio": null }, 
+                { "name": "PERVINCHE", "subtitle": "", "audio": null }, 
+                { "name": "SANSOVINO", "subtitle": "", "audio": null }, 
+                { "name": "CINCINNATO", "subtitle": "MERCATO RIONALE", "audio": null }, 
+                { "name": "LOMBARDIA", "subtitle": "FERMATA PIU VICINA PER LA PISCINA LOMBARDIA", "audio": null }, 
+                { "name": "BORSI", "subtitle": "", "audio": null }, 
+                { "name": "LARGO TOSCANA", "subtitle": "", "audio": null }, 
+                { "name": "LARGO BORGARO", "subtitle": "", "audio": null }, 
+                { "name": "PIERO DELLA FRANCESCA", "subtitle": "FERMATA PIU VICINA PER IL MUSEO A COME AMBIENTE", "audio": null }, 
+                { "name": "OSPEDALE AMEDEO DI SAVOIA", "subtitle": "UNIVERSITÀ - DIPARTIMENTO DI INFORMATICA", "audio": null }, 
+                { "name": "TASSONI", "subtitle": "", "audio": null }, 
+                { "name": "AVELLINO", "subtitle": "", "audio": null }, 
+                { "name": "LIVORNO", "subtitle": "", "audio": null }, 
+                { "name": "INDUSTRIA", "subtitle": "", "audio": null }, 
+                { "name": "RONDÒ FORCA OVEST", "subtitle": "MARIA AUSILIATRICE", "audio": null }, 
+                { "name": "OSPEDALE COTTOLENGO", "subtitle": "ANAGRAFE CENTRALE", "audio": null }, 
+                { "name": "PORTA PALAZZO", "subtitle": "PIAZZA DELLA REPBLICA", "audio": null }, 
+                { "name": "PORTA PALAZZO EST", "subtitle": "PIAZZA DELLA REPBLICA", "audio": null }, 
+                { "name": "XI FEBBRAIO", "subtitle": "AUTOSTAZIONE DORA", "audio": null }, 
+                { "name": "GIARDINI REALI", "subtitle": "RONDÒ RIVELLA", "audio": null }, 
+                { "name": "ROSSINI", "subtitle": "MOLE ANTONELLIANA", "audio": null }, 
+                { "name": "CAMPUS EINAUDI", "subtitle": "", "audio": null }, 
+                { "name": "LARGO BERARDI", "subtitle": "", "audio": null }, 
+                { "name": "OSPEDALE GRADENIGO", "subtitle": "", "audio": null }, 
+                { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }
+            ]}
+        };
     }
 
-    function updateStatusDisplay() {
-        if(!currentLineKey || !linesData[currentLineKey]) {
-            els.statusStop.textContent = "--"; els.statusSub.textContent = ""; els.statusProg.textContent = "--/--";
-            return;
+    function loadData() { linesData = JSON.parse(localStorage.getItem('busSystem-linesData')) || getDefaultData(); saveData(); }
+    function saveData() { localStorage.setItem('busSystem-linesData', JSON.stringify(linesData)); sendFullStateUpdate(); }
+    function loadMessages() {
+        const messages = localStorage.getItem('busSystem-infoMessages');
+        infoMessagesInput.value = messages ? JSON.parse(messages).join('\\n') : ["Benvenuti a bordo del servizio Harzafi.", "Si prega di mantenere il corretto distanziamento."].join('\\n');
+        if (!messages) saveMessages(false);
+    }
+
+    function saveMessages(showFeedback = true) {
+        const messagesArray = infoMessagesInput.value.split('\\n').filter(msg => msg.trim() !== '');
+        localStorage.setItem('busSystem-infoMessages', JSON.stringify(messagesArray));
+        sendFullStateUpdate();
+        if(showFeedback) {
+            const originalText = saveMessagesBtn.textContent;
+            saveMessagesBtn.textContent = 'Salvato!'; saveMessagesBtn.classList.add('btn-success'); saveMessagesBtn.classList.remove('btn-primary');
+            setTimeout(() => { saveMessagesBtn.textContent = originalText; saveMessagesBtn.classList.remove('btn-success'); saveMessagesBtn.classList.add('btn-primary'); }, 2000);
         }
-        const stops = linesData[currentLineKey].stops;
-        if(currentStopIndex >= stops.length) currentStopIndex = stops.length - 1;
-        els.statusStop.textContent = stops[currentStopIndex].name;
-        els.statusSub.textContent = stops[currentStopIndex].subtitle || "";
-        els.statusProg.textContent = `${currentStopIndex + 1}/${stops.length}`;
-        
-        localStorage.setItem('busSystem-currentLine', currentLineKey);
-        localStorage.setItem('busSystem-currentStopIndex', currentStopIndex);
     }
 
-    // Event Listeners Semplificati
-    els.lineSelector.addEventListener('change', (e) => { currentLineKey = e.target.value; currentStopIndex = 0; updateStatusDisplay(); sendUpdate(); });
-    els.prevBtn.addEventListener('click', () => { if(currentStopIndex > 0) { currentStopIndex--; updateStatusDisplay(); sendUpdate(); }});
-    els.nextBtn.addEventListener('click', () => { if(linesData[currentLineKey] && currentStopIndex < linesData[currentLineKey].stops.length -1) { currentStopIndex++; updateStatusDisplay(); sendUpdate(); }});
-    
-    els.announceBtn.addEventListener('click', () => { socket.emit('update_all', { announcement: {timestamp: Date.now()} }); });
-    els.bookedBtn.addEventListener('click', () => { socket.emit('update_all', { stopRequested: {timestamp: Date.now()} }); });
-    
-    els.saveMsgsBtn.addEventListener('click', () => { 
-        localStorage.setItem('busSystem-infoMessages', JSON.stringify(els.msgsInput.value.split('\\n').filter(x=>x.trim())));
-        sendUpdate();
-        alert('Messaggi salvati!');
-    });
+    function loadMediaStatus() {
+        const mediaSource = localStorage.getItem('busSystem-mediaSource');
+        const videoName = localStorage.getItem('busSystem-videoName');
+        const hasMedia = mediaSource === 'embed' || (mediaSource === 'server' && videoName);
+        
+        mediaControlsContainer.classList.toggle('disabled', !hasMedia);
 
-    els.notAvailToggle.addEventListener('change', () => {
-        localStorage.setItem('busSystem-videoNotAvailable', els.notAvailToggle.checked);
-        sendUpdate();
-    });
+        if (mediaSource === 'embed') {
+            mediaUploadStatusText.textContent = `Media da Embed attivo.`;
+            removeMediaBtn.style.display = 'inline-block';
+        } else if (mediaSource === 'server' && videoName) {
+            mediaUploadStatusText.textContent = `Video locale: ${videoName}`;
+            removeMediaBtn.style.display = 'inline-block';
+        } else {
+            mediaUploadStatusText.textContent = 'Nessun media caricato.';
+            removeMediaBtn.style.display = 'none';
+        }
+    }
 
-    // Gestione Video Locale
-    els.importVidBtn.addEventListener('click', () => els.videoInput.click());
-    els.videoInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0]; if(!file) return;
-        const fd = new FormData(); fd.append('video', file);
-        els.importVidBtn.textContent = "Caricamento...";
-        const res = await fetch('/upload-video', { method: 'POST', body: fd });
-        if(res.ok) {
-            localStorage.setItem('busSystem-mediaSource', 'server');
-            localStorage.setItem('busSystem-videoName', file.name);
-            localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
-            checkMediaStatus(); sendUpdate();
-        } else alert("Errore caricamento");
-        els.importVidBtn.textContent = "Carica Video";
-    });
-    
-    els.removeVidBtn.addEventListener('click', async () => {
-        await fetch('/clear-video', { method: 'POST' });
-        localStorage.removeItem('busSystem-mediaSource');
+    async function handleLocalVideoUpload(event) {
+        const file = event.target.files[0]; if (!file) return;
+        importVideoBtn.disabled = true; importVideoBtn.textContent = 'CARICAMENTO...';
+        const formData = new FormData(); formData.append('video', file);
+        const response = await fetchAuthenticated('/upload-video', { method: 'POST', body: formData });
+        
+        // --- GESTIONE CARICAMENTO VIDEO ---
+        // 'response' potrebbe essere null se fetchAuthenticated ha gestito un errore 401
+        if (response) {
+            if (response.ok) {
+                localStorage.setItem('busSystem-mediaSource', 'server'); 
+                localStorage.setItem('busSystem-videoName', file.name);
+                localStorage.removeItem('busSystem-embedCode');
+                localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
+                loadMediaStatus(); 
+                sendFullStateUpdate();
+            } else {
+                // Errore 500 o altro errore dal server (es. disco pieno)
+                try {
+                    const errorData = await response.json();
+                    alert('Errore caricamento: ' + (errorData.error || 'Errore server sconosciuto'));
+                } catch(e) {
+                    alert('Errore grave durante il caricamento del video.');
+                }
+            }
+        }
+        // --- FINE GESTIONE ---
+        
+        importVideoBtn.disabled = false; importVideoBtn.textContent = 'Importa Video Locale';
+        videoImporter.value = ''; // Resetta l'input file per permettere di ricaricare lo stesso file
+    }
+    async function handleEmbedImport() {
+        const rawCode = embedCodeInput.value.trim();
+        if (!rawCode.includes('<iframe')) { alert('Codice <iframe> non valido.'); return; }
+        await fetchAuthenticated('/clear-video', { method: 'POST' });
+        const tempDiv = document.createElement('div'); tempDiv.innerHTML = rawCode;
+        const iframe = tempDiv.querySelector('iframe'); if (!iframe) { alert('Tag <iframe> non trovato.'); return; }
+        iframe.setAttribute('width', '100%'); iframe.setAttribute('height', '100%');
+        iframe.setAttribute('style', 'position:absolute; top:0; left:0; width:100%; height:100%; border:0;');
+        localStorage.setItem('busSystem-mediaSource', 'embed');
+        localStorage.setItem('busSystem-embedCode', iframe.outerHTML);
         localStorage.removeItem('busSystem-videoName');
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
-        checkMediaStatus(); sendUpdate();
-    });
+        loadMediaStatus(); embedCodeInput.value = ''; sendFullStateUpdate();
+    }
+    async function removeMedia() {
+        if (!confirm('Rimuovere il media attuale?')) return;
+        await fetchAuthenticated('/clear-video', { method: 'POST' });
+        localStorage.removeItem('busSystem-mediaSource'); localStorage.removeItem('busSystem-videoName');
+        localStorage.removeItem('busSystem-embedCode');
+        localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
+        loadMediaStatus(); sendFullStateUpdate();
+    }
 
-    function checkMediaStatus() {
-        const src = localStorage.getItem('busSystem-mediaSource');
-        const name = localStorage.getItem('busSystem-videoName');
-        if(src === 'server' && name) {
-            els.vidStatus.textContent = "Video attivo: " + name;
-            els.removeVidBtn.style.display = 'inline-block';
+    function saveServiceStatus() { localStorage.setItem('busSystem-serviceStatus', serviceStatus); sendFullStateUpdate(); }
+    function renderServiceStatus() {
+        const isOnline = serviceStatus === 'online';
+        serviceStatusText.textContent = isOnline ? 'In Servizio' : 'Fuori Servizio';
+        serviceStatusText.style.color = isOnline ? 'var(--success)' : 'var(--danger)';
+        serviceStatusToggle.checked = isOnline;
+    }
+
+    function saveVideoNotAvailableStatus() {
+        localStorage.setItem('busSystem-videoNotAvailable', videoNotAvailable);
+        sendFullStateUpdate();
+    }
+    function renderVideoNotAvailableStatus() {
+        const isNotAvailable = videoNotAvailable === true;
+        videoNotAvailableStatusText.textContent = isNotAvailable ? 'Attivato' : 'Disattivato';
+        videoNotAvailableStatusText.style.color = isNotAvailable ? 'var(--danger)' : 'var(--text-primary)';
+        videoNotAvailableToggle.checked = isNotAvailable;
+    }
+
+    function renderAll() { renderNavigationPanel(); renderManagementPanel(); renderStatusDisplay(); }
+    function renderNavigationPanel() {
+        lineSelector.innerHTML = '';
+        const keys = Object.keys(linesData).sort();
+        if (keys.length > 0) {
+            keys.forEach(key => {
+                const option = document.createElement('option');
+                option.value = key; option.textContent = `${key} → ${linesData[key].direction}`;
+                lineSelector.appendChild(option);
+            });
+            if (linesData[currentLineKey]) lineSelector.value = currentLineKey;
         } else {
-            els.vidStatus.textContent = "Nessun video.";
-            els.removeVidBtn.style.display = 'none';
+            lineSelector.innerHTML = '<option>Nessuna linea disponibile</option>';
         }
     }
-
-    // Media Controls
-    els.playPause.addEventListener('click', () => {
-        let state = localStorage.getItem('busSystem-playbackState') || 'playing';
-        state = (state === 'playing') ? 'paused' : 'playing';
-        localStorage.setItem('busSystem-playbackState', state);
-        els.playPause.textContent = (state === 'playing') ? '||' : '▶';
-        sendUpdate();
-    });
-    els.volSlider.addEventListener('input', () => sendUpdate());
-    els.seekBack.addEventListener('click', () => socket.emit('update_all', { seekAction: { value: -5, timestamp: Date.now() } }));
-    els.seekFwd.addEventListener('click', () => socket.emit('update_all', { seekAction: { value: 5, timestamp: Date.now() } }));
-
-    // Editor Linee (Gestione base + Audio)
-    els.stopsContainer.addEventListener('click', (e) => {
-        if(e.target.closest('.audio-upload-btn')) e.target.closest('.stop-item').querySelector('input[type=file]').click();
-        if(e.target.closest('.remove-stop-btn')) e.target.closest('.stop-item').remove();
-    });
-    els.stopsContainer.addEventListener('change', (e) => {
-        if(e.target.type === 'file') {
-            const reader = new FileReader();
-            const btn = e.target.closest('.stop-item').querySelector('.audio-upload-btn');
-            reader.onload = (ev) => { 
-                e.target.closest('.stop-item').dataset.audio = ev.target.result; 
-                btn.classList.remove('status-red'); btn.classList.add('status-green');
-            };
-            reader.readAsDataURL(e.target.files[0]);
+    function renderManagementPanel() {
+        lineManagementList.innerHTML = '';
+        Object.keys(linesData).sort().forEach(key => {
+            const item = document.createElement('li');
+            item.className = 'line-item';
+            item.innerHTML = `<span>${key} → ${linesData[key].direction}</span><div class="line-actions"><button class="btn-secondary edit-btn" data-id="${key}">Modifica</button><button class="btn-danger delete-btn" data-id="${key}">Elimina</button></div>`;
+            lineManagementList.appendChild(item);
+        });
+    }
+    function renderStatusDisplay() {
+        const line = linesData[currentLineKey];
+        const hasLine = line && line.stops && line.stops.length > 0;
+        nextBtn.disabled = !hasLine || currentStopIndex >= line.stops.length - 1;
+        prevBtn.disabled = !hasLine || currentStopIndex <= 0;
+        announceBtn.disabled = !hasLine;
+        if (!hasLine) {
+            statusLineName.textContent = 'N/D'; statusLineDirection.textContent = 'N/D';
+            statusStopName.textContent = 'Nessuna Fermata'; statusStopSubtitle.textContent = 'Selezionare una linea'; statusProgress.textContent = '--/--';
+            return;
         }
+        const stop = line.stops[currentStopIndex]; if (!stop) return;
+        statusLineName.textContent = currentLineKey; statusLineDirection.textContent = line.direction;
+        statusStopName.textContent = stop.name; statusStopSubtitle.textContent = stop.subtitle || ' ';
+        statusProgress.textContent = `${currentStopIndex + 1}/${line.stops.length}`;
+    }
+
+    function updateAndRenderStatus() {
+        if (!linesData[currentLineKey] || Object.keys(linesData).length === 0) {
+            currentLineKey = Object.keys(linesData).sort()[0] || null;
+            currentStopIndex = 0;
+        } else {
+            const stopsCount = linesData[currentLineKey].stops.length;
+            if (currentStopIndex >= stopsCount) currentStopIndex = Math.max(0, stopsCount - 1);
+        }
+        localStorage.setItem('busSystem-currentLine', currentLineKey);
+        localStorage.setItem('busSystem-currentStopIndex', currentStopIndex);
+        if (linesData[currentLineKey]) lineSelector.value = currentLineKey;
+        renderStatusDisplay();
+        sendFullStateUpdate();
+    }
+    
+    function setupMediaControls() {
+        const initialVolume = localStorage.getItem('busSystem-volumeLevel') || '1.0';
+        const initialPlaybackState = localStorage.getItem('busSystem-playbackState') || 'playing';
+        volumeSlider.value = initialVolume;
+        updateVolumeIcon(initialVolume);
+        playPauseBtn.innerHTML = initialPlaybackState === 'playing' ? '❚❚' : '▶';
+
+        playPauseBtn.addEventListener('click', () => {
+            let currentState = localStorage.getItem('busSystem-playbackState') || 'playing';
+            const newState = currentState === 'playing' ? 'paused' : 'playing';
+            localStorage.setItem('busSystem-playbackState', newState);
+            playPauseBtn.innerHTML = newState === 'playing' ? '❚❚' : '▶';
+            sendFullStateUpdate();
+        });
+
+        volumeSlider.addEventListener('input', () => {
+            const newVolume = volumeSlider.value;
+            localStorage.setItem('busSystem-volumeLevel', newVolume);
+            updateVolumeIcon(newVolume);
+            sendFullStateUpdate();
+        });
+
+        seekBackBtn.addEventListener('click', () => {
+            localStorage.setItem('busSystem-seekAction', JSON.stringify({ value: -5, timestamp: Date.now() }));
+            sendFullStateUpdate();
+        });
+
+        seekFwdBtn.addEventListener('click', () => {
+            localStorage.setItem('busSystem-seekAction', JSON.stringify({ value: 5, timestamp: Date.now() }));
+            sendFullStateUpdate();
+        });
+    }
+
+    function updateVolumeIcon(volume) {
+        const vol = parseFloat(volume);
+        if (vol === 0) { volumeIcon.textContent = '🔇'; }
+        else if (vol < 0.5) { volumeIcon.textContent = '🔈'; }
+        else { volumeIcon.textContent = '🔊'; }
+    }
+    
+    function setupPreviewControls() {
+        const previewIframe = document.getElementById('viewer-iframe-preview');
+        const togglePlaybackBtn = document.getElementById('toggle-preview-playback-btn');
+        let videoInIframe = null;
+
+        const updateButtonState = () => {
+            if (videoInIframe) {
+                if (videoInIframe.paused) {
+                    togglePlaybackBtn.textContent = '▶ Riproduci in anteprima';
+                } else {
+                    togglePlaybackBtn.textContent = '❚❚ Pausa in anteprima';
+                }
+            }
+        };
+        
+        previewIframe.addEventListener('load', () => {
+            try {
+                const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
+                videoInIframe = iframeDoc.getElementById('ad-video');
+                
+                // === MODIFICA CHIAVE: MUTA TUTTI GLI AUDIO NELL'ANTEPRIMA ===
+                const announcementAudio = iframeDoc.getElementById('announcement-sound');
+                if (announcementAudio) announcementAudio.muted = true;
+                const bookedAudio = iframeDoc.getElementById('booked-sound-viewer');
+                if (bookedAudio) bookedAudio.muted = true;
+                const stopAudio = iframeDoc.getElementById('stop-announcement-sound');
+                if (stopAudio) stopAudio.muted = true;
+                
+                if (videoInIframe) {
+                    videoInIframe.muted = true; // Rende il video silenzioso nella preview
+                    videoInIframe.pause(); // Lo mette in pausa di default
+                    
+                    // Se il video di sfondo esiste (solo per video locali)
+                    const videoBgEl = iframeDoc.getElementById('ad-video-bg');
+                    if (videoBgEl) videoBgEl.muted = true;
+
+                    videoInIframe.addEventListener('play', updateButtonState);
+                    videoInIframe.addEventListener('pause', updateButtonState);
+
+                    togglePlaybackBtn.disabled = false;
+                    updateButtonState();
+                } else {
+                    if (iframeDoc.querySelector('.placeholder-image')) {
+                        togglePlaybackBtn.disabled = true;
+                        togglePlaybackBtn.textContent = 'Nessun video da riprodurre';
+                    }
+                }
+
+            } catch (e) {
+                console.warn("Contenuto dell'iframe non accessibile. I controlli di riproduzione sono disabilitati.");
+                togglePlaybackBtn.disabled = true;
+                togglePlaybackBtn.textContent = 'Riproduzione non controllabile';
+            }
+        });
+
+        togglePlaybackBtn.addEventListener('click', () => {
+            if (videoInIframe && !togglePlaybackBtn.disabled) {
+                if (videoInIframe.paused) {
+                    videoInIframe.play();
+                } else {
+                    videoInIframe.pause();
+                }
+            }
+        });
+    }
+
+    function initialize() {
+        loadMediaStatus();
+        setupMediaControls();
+        setupPreviewControls();
+        loadData();
+        loadMessages();
+        
+        serviceStatus = localStorage.getItem('busSystem-serviceStatus') || 'online';
+        saveServiceStatus();
+        renderServiceStatus();
+        
+        videoNotAvailable = localStorage.getItem('busSystem-videoNotAvailable') === 'true';
+        saveVideoNotAvailableStatus();
+        renderVideoNotAvailableStatus();
+        
+        currentLineKey = localStorage.getItem('busSystem-currentLine');
+        currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex'), 10) || 0;
+        
+        renderAll();
+        updateAndRenderStatus();
+    }
+    
+    lineSelector.addEventListener('change', (e) => { currentLineKey = e.target.value; currentStopIndex = 0; updateAndRenderStatus(); });
+    resetDataBtn.addEventListener('click', () => { if (confirm('Sei sicuro? Questa azione cancellerà tutti i dati e richiederà un nuovo login.')) { localStorage.clear(); window.location.href="{{ url_for('logout') }}"; } });
+    nextBtn.addEventListener('click', () => { const currentLine = linesData[currentLineKey]; if (currentLine && currentStopIndex < currentLine.stops.length - 1) { currentStopIndex++; updateAndRenderStatus(); } });
+    prevBtn.addEventListener('click', () => { if (currentStopIndex > 0) { currentStopIndex--; updateAndRenderStatus(); } });
+    announceBtn.addEventListener('click', () => { 
+        if (currentLineKey && linesData[currentLineKey]) {
+            localStorage.setItem('busSystem-playAnnouncement', JSON.stringify({ timestamp: Date.now() })); 
+            sendFullStateUpdate();
+        } else { alert('Nessuna linea attiva selezionata.'); } 
+    });
+    serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
+    
+    videoNotAvailableToggle.addEventListener('change', () => {
+        videoNotAvailable = videoNotAvailableToggle.checked;
+        saveVideoNotAvailableStatus();
+        renderVideoNotAvailableStatus();
     });
 
-    document.getElementById('add-new-line-btn').addEventListener('click', () => {
-        document.getElementById('edit-line-id').value = '';
-        els.stopsContainer.innerHTML = '';
-        addStopDOM(); els.modal.showModal();
+    bookedBtn.addEventListener('click', () => {
+        localStorage.setItem('busSystem-stopRequested', JSON.stringify({ timestamp: Date.now() }));
+        sendFullStateUpdate();
+        
+        bookedBtn.textContent = 'PRENOTATA!';
+        bookedBtn.classList.add('btn-danger');
+        bookedBtn.classList.remove('btn-primary');
+        bookedBtn.disabled = true;
+        
+        setTimeout(() => {
+            bookedBtn.textContent = 'PRENOTA FERMATA';
+            bookedBtn.classList.remove('btn-danger');
+            bookedBtn.classList.add('btn-primary');
+            bookedBtn.disabled = false;
+        }, 2500); 
     });
 
-    document.getElementById('line-editor-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        const newKey = document.getElementById('line-name').value.trim().toUpperCase();
-        const stops = Array.from(document.querySelectorAll('.stop-item')).map(item => ({
-            name: item.querySelector('.stop-name').value.toUpperCase(),
-            subtitle: item.querySelector('.stop-sub').value.toUpperCase(),
-            audio: item.dataset.audio || null
-        })).filter(s => s.name);
-        
-        if(stops.length === 0 || !newKey) return alert("Dati mancanti");
-        
-        const oldKey = document.getElementById('edit-line-id').value;
-        if(oldKey && oldKey !== newKey) delete linesData[oldKey];
-        
-        linesData[newKey] = { direction: document.getElementById('line-direction').value, stops };
-        saveData(); renderAll(); els.modal.close();
+    importVideoBtn.addEventListener('click', () => videoImporter.click());
+    videoImporter.addEventListener('change', handleLocalVideoUpload);
+    importEmbedBtn.addEventListener('click', handleEmbedImport);
+    removeMediaBtn.addEventListener('click', removeMedia);
+    addNewLineBtn.addEventListener('click', () => { 
+        document.getElementById('edit-line-id').value = ''; 
+        document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; 
+        lineEditorForm.reset(); 
+        stopsListContainer.innerHTML = ''; 
+        addStopToModal(); 
+        modal.showModal(); 
     });
-
-    els.linesList.addEventListener('click', (e) => {
-        const btn = e.target;
-        const id = btn.dataset.id;
-        if(btn.classList.contains('del-btn')) { delete linesData[id]; saveData(); renderAll(); }
-        if(btn.classList.contains('edit-btn')) {
-            document.getElementById('edit-line-id').value = id;
-            document.getElementById('line-name').value = id;
-            document.getElementById('line-direction').value = linesData[id].direction;
-            els.stopsContainer.innerHTML = '';
-            linesData[id].stops.forEach(s => addStopDOM(s));
-            els.modal.showModal();
+    
+    lineManagementList.addEventListener('click', (e) => {
+        const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
+        if (target.classList.contains('edit-btn')) {
+            editLineId.value = lineId; document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; const line = linesData[lineId];
+            lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; 
+            (line.stops || []).forEach(s => addStopToModal(s)); 
+            modal.showModal();
+        } if (target.classList.contains('delete-btn')) { 
+            if (confirm(`Eliminare la linea "${lineId}"?`)) { 
+                delete linesData[lineId]; 
+                saveData(); 
+                renderAll(); 
+            } 
         }
     });
     
-    document.getElementById('cancel-btn').addEventListener('click', () => els.modal.close());
+    addStopBtn.addEventListener('click', () => addStopToModal());
+    
+    // === NUOVO GESTORE EVENTI PER IL MODAL FERMATE (Upload e Rimozione) ===
+    stopsListContainer.addEventListener('click', (e) => {
+        const audioBtn = e.target.closest('.audio-upload-btn');
+        const removeBtn = e.target.closest('.remove-stop-btn');
+        
+        if (audioBtn) {
+            // Cliccato bottone audio: triggera il file input nascosto
+            const stopItem = audioBtn.closest('.stop-item');
+            stopItem.querySelector('.stop-audio-input').click();
+        }
+        
+        if (removeBtn) {
+            // Cliccato bottone rimuovi
+            if (stopsListContainer.children.length > 1) {
+                removeBtn.closest('.stop-item').remove();
+            } else {
+                alert('Ogni linea deve avere almeno una fermata.');
+            }
+        }
+    });
 
-    function addStopDOM(data = {}) {
-        const div = document.createElement('div'); div.className = 'stop-item';
-        if(data.audio) div.dataset.audio = data.audio;
-        const color = data.audio ? 'status-green' : 'status-red';
-        div.innerHTML = `
-            <input type="file" style="display:none;" accept="audio/*">
-            <button type="button" class="audio-upload-btn ${color}"><svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg></button>
-            <input type="text" class="stop-name" placeholder="Nome" value="${data.name||''}" required>
-            <input type="text" class="stop-sub" placeholder="Sub" value="${data.subtitle||''}">
-            <button type="button" class="btn-danger remove-stop-btn">X</button>
+    // === NUOVO GESTORE EVENTI PER IL CARICAMENTO FILE AUDIO ===
+    stopsListContainer.addEventListener('change', (e) => {
+        if (e.target.classList.contains('stop-audio-input')) {
+            const file = e.target.files[0];
+            const stopItem = e.target.closest('.stop-item');
+            const audioBtn = stopItem.querySelector('.audio-upload-btn');
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const base64Audio = event.target.result;
+                    stopItem.dataset.audioData = base64Audio; // Salva Base64
+                    audioBtn.classList.remove('status-red');
+                    audioBtn.classList.add('status-green');
+                    audioBtn.innerHTML = iconMicGreen;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+    });
+    
+    // === NUOVA FUNZIONE per aggiungere fermate (con audio) ===
+    function addStopToModal(stop = { name: '', subtitle: '', audio: null }) {
+        const stopItem = document.createElement('div');
+        stopItem.className = 'stop-item';
+        
+        const audioData = stop.audio || null;
+        const audioStatus = audioData ? 'green' : 'red';
+        
+        stopItem.innerHTML = `
+            <input type="file" class="stop-audio-input" accept="audio/mpeg,audio/mp3" style="display: none;">
+            <button type="button" class="audio-upload-btn status-${audioStatus}" title="Carica/Modifica audio fermata">
+                ${audioStatus === 'green' ? iconMicGreen : iconMicRed}
+            </button>
+            <div class="stop-inputs">
+                <input type="text" placeholder="Nome fermata" class="stop-name-input" value="${stop.name || ''}" required>
+                <input type="text" placeholder="Sottotitolo (opz.)" class="stop-subtitle-input" value="${stop.subtitle || ''}">
+            </div>
+            <button type="button" class="btn-danger remove-stop-btn" title="Rimuovi fermata">-</button>
         `;
-        els.stopsContainer.appendChild(div);
+        
+        // Salva il dato audio (Base64) sul div principale
+        if (audioData) {
+            stopItem.dataset.audioData = audioData;
+        }
+        
+        stopsListContainer.appendChild(stopItem);
     }
     
-    init();
+    // === MODIFICATO GESTORE SUBMIT FORM (per salvare audio) ===
+    lineEditorForm.addEventListener('submit', (e) => {
+        e.preventDefault(); 
+        const originalId = editLineId.value; 
+        const newId = lineNameInput.value.trim().toUpperCase(); 
+        const direction = lineDirectionInput.value.trim();
+        
+        if (!newId || !direction) { 
+            alert('Nome linea e destinazione sono obbligatori.'); 
+            return; 
+        }
+        
+        const stops = Array.from(stopsListContainer.querySelectorAll('.stop-item')).map(item => {
+            const name = item.querySelector('.stop-name-input').value.trim().toUpperCase();
+            const subtitle = item.querySelector('.stop-subtitle-input').value.trim().toUpperCase();
+            const audio = item.dataset.audioData || null; // Recupera Base64
+            return { name, subtitle, audio }; // Nuovo formato
+        }).filter(s => s.name);
+        
+        if (stops.length === 0) { 
+            alert('Aggiungere almeno una fermata con un nome.'); 
+            return; 
+        }
+        
+        if (originalId && originalId !== newId) {
+            delete linesData[originalId]; 
+        }
+        linesData[newId] = { direction, stops }; 
+        saveData();
+        
+        if (currentLineKey === originalId) { 
+            currentLineKey = newId; 
+            localStorage.setItem('busSystem-currentLine', newId); 
+        }
+        
+        renderAll(); 
+        updateAndRenderStatus(); 
+        modal.close();
+    });
+    
+    saveMessagesBtn.addEventListener('click', () => saveMessages(true));
+    const cancelBtn = document.getElementById('cancel-btn');
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.close(); });
+    cancelBtn.addEventListener('click', () => modal.close());
+
+    initialize();
 });
 </script>
 </body>
 </html>
 """
 
-# --- VISUALIZZATORE (COMPLETAMENTE AGGIORNATO) ---
+# --- VISUALIZZATORE (MODIFICATO con Modale di Errore) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizzazione Harzafi</title>
+    <title>Visualizzazione Fermata Harzafi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         :root {
-            --text-white: #ffffff;
-            --bg-dark: #0f0f0f;
-            --bar-bg: rgba(20, 20, 25, 0.65); /* Glass dark */
-            --bar-border: rgba(255, 255, 255, 0.1);
-            --accent-gradient: linear-gradient(135deg, #D544A7, #4343A2);
+            --main-text-color: #ffffff;
+            --gradient-start: #D544A7;
+            --gradient-end: #4343A2;
+            --line-color: #8A2387;
         }
         body {
-            margin: 0; overflow: hidden; height: 100vh; width: 100vw;
-            background: #000; font-family: 'Montserrat', sans-serif; color: white;
+            margin: 0;
+            font-family: 'Montserrat', sans-serif;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            color: var(--main-text-color);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            font-size: 1.2em;
         }
+        #loader {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            z-index: 999; transition: opacity 0.8s ease;
+        }
+        #loader img { width: 250px; max-width: 70%; animation: pulse-logo 2s infinite ease-in-out; }
+        #loader p { margin-top: 25px; font-size: 1.2em; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9; }
+        @keyframes pulse-logo {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+        #loader.hidden { opacity: 0; pointer-events: none; }
         
-        /* --- LAYOUT PRINCIPALE --- */
-        .viewer-container {
-            display: flex; height: 100%; width: 100%;
-            background: var(--accent-gradient);
-        }
-        
-        /* SEZIONE SINISTRA (GRAFICA LINEA) */
-        .left-panel {
-            flex: 0 0 35%; padding: 60px; display: flex; flex-direction: column; justify-content: center;
-            position: relative; z-index: 10;
-        }
+        .main-content-wrapper { flex: 3; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 40px; }
+        .video-wrapper { flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box; }
+        .container { display: flex; align-items: center; width: 100%; max-width: 1400px; opacity: 0; transition: opacity 0.8s ease; }
+        .container.visible { opacity: 1; }
         .line-graphic {
-            display: flex; flex-direction: column; align-items: center; position: relative;
+            flex-shrink: 0; width: 120px; height: 500px; display: flex;
+            flex-direction: column; align-items: center; position: relative;
+            justify-content: center; padding-bottom: 80px;
         }
-        .line-number-circle {
-            width: 120px; height: 120px; border-radius: 50%; background: white;
-            border: 6px solid #4343A2; display: flex; align-items: center; justify-content: center;
-            font-size: 60px; font-weight: 900; color: #8A2387; z-index: 2;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3); margin-bottom: 40px;
+        .line-graphic::before {
+            content: ''; position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+            width: 12px; height: 78%; background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 6px; z-index: 1;
         }
-        .line-path-vertical {
-            position: absolute; top: 60px; bottom: -40px; width: 10px; background: rgba(255,255,255,0.4);
-            border-radius: 5px; z-index: 1;
+        .line-id-container {
+            width: 100px; height: 100px; background-color: var(--main-text-color);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            z-index: 2; box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+            border: 4px solid var(--gradient-end); position: absolute;
+            top: 15%; left: 50%; transform: translateX(-50%);
         }
-        .stop-indicator {
-            width: 50px; height: 50px; background: white; border-radius: 12px; z-index: 2;
-            box-shadow: 0 0 20px rgba(255,255,255,0.8); margin-top: auto;
+        #line-id { font-size: 48px; font-weight: 900; color: var(--line-color); }
+        .current-stop-indicator {
+            width: 60px; height: 60px; background-color: var(--main-text-color);
+            border-radius: 12px; z-index: 2; position: absolute; bottom: 27%;
+            left: 50%; transform: translateX(-50%); opacity: 1;
+            box-shadow: 0 0 20px rgba(255,255,255,0.7);
         }
+        .current-stop-indicator.exit { opacity: 0; transform: translateX(-50%) translateY(50px) scale(0.5); transition: opacity 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55), transform 0.4s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
+        .current-stop-indicator.enter { animation: slideInFromTopFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
+        .current-stop-indicator.enter-reverse { animation: slideInFromBottomFadeIn 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards; }
         
-        /* TESTI INFORMAZIONI */
-        .info-text-group { margin-top: 20px; text-align: center; }
-        .lbl { font-size: 20px; opacity: 0.8; text-transform: uppercase; font-weight: 700; letter-spacing: 1px; margin-bottom: 5px;}
-        .val-dest { font-size: 42px; font-weight: 900; text-transform: uppercase; margin: 0 0 40px 0; line-height: 1.1; }
-        .val-stop { font-size: 78px; font-weight: 900; text-transform: uppercase; margin: 0; line-height: 1; white-space: normal; }
-        .val-sub { font-size: 28px; font-weight: 500; margin-top: 10px; opacity: 0.9; text-transform: uppercase;}
+        .text-content { padding-left: 70px; width: 100%; overflow: hidden; }
+        .direction-header { font-size: 24px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #direction-name { font-size: 56px; font-weight: 900; margin: 5px 0 60px 0; text-transform: uppercase; }
+        .next-stop-header { font-size: 22px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
+        #stop-name { font-size: 112px; font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase; white-space: normal; opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
+        #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
+        #stop-name.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
+        #stop-subtitle { font-size: 34px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
+        
+        .logo {
+            position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
+            filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
+        }
+        .logo.visible { opacity: 0.9; }
 
-        /* ANIMAZIONI TESTO */
-        .fade-out-up { animation: fadeOutUp 0.4s forwards; }
-        .fade-in-up { animation: fadeInUp 0.5s forwards; }
-        @keyframes fadeOutUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-30px); } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-
-        /* SEZIONE DESTRA (VIDEO) */
-        .right-panel {
-            flex: 1; display: flex; align-items: center; justify-content: center;
-            padding: 40px 40px 140px 0; /* Padding bottom alto per fare spazio alla barra */
+        @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        #service-offline-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; pointer-events: none; }
+        #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
+        #service-offline-overlay h2 { font-size: 5vw; font-weight: 900; margin: 0; text-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        #service-offline-overlay p { font-size: 2vw; font-weight: 600; opacity: 0.9; margin-top: 15px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        @keyframes fadeInBlur { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOutBlur { from { opacity: 1; } to { opacity: 0; } }
+        
+        #video-player-container {
+            width: 100%; max-width: 100%; background-color: transparent;
+            /* === Bordi più arrotondati (come richiesto) === */
+            border-radius: 40px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden; display: flex; align-items: center; justify-content: center;
             position: relative;
         }
-        .video-frame {
-            width: 100%; aspect-ratio: 16/9; background: black; border-radius: 30px;
-            overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.4); position: relative;
+        
+        #video-player-container::before {
+            content: '';
+            position: absolute;
+            top: -30px; left: -30px; right: -30px; bottom: -30px;
+            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+            filter: blur(25px) brightness(0.7);
+            z-index: 1;
         }
-        .video-frame video, .video-frame img, .video-frame iframe {
-            width: 100%; height: 100%; object-fit: cover;
+        /* === Bordi più arrotondati (come richiesto) === */
+        #video-player-container iframe { border-radius: 40px; z-index: 2; }
+        .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
+        
+        .placeholder-image {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: 2; 
+            /* === Bordi più arrotondati (come richiesto) === */
+            border-radius: 40px;
         }
-        .video-bg-blur {
-            position: absolute; width: 100%; height: 100%; top:0; left:0;
-            filter: blur(40px) brightness(0.6); z-index: -1; transform: scale(1.1);
+        
+        .video-background-blur {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            filter: blur(30px) brightness(0.7); transform: scale(1.15);
+            opacity: 0.8; overflow: hidden; z-index: 3;
         }
+        #ad-video-bg, #ad-video { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        #ad-video-bg { object-fit: cover; }
+        #ad-video { object-fit: contain; z-index: 4; }
+        
+        .box-enter-animation { animation: box-enter 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .box-exit-animation { animation: box-exit 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
 
-        /* --- BARRA INFO IN BASSO (NUOVA) --- */
-        .info-bar {
-            position: fixed; bottom: 35px; left: 50%; transform: translateX(-50%);
-            width: 92%; height: 90px;
-            background: var(--bar-bg);
-            border: 1px solid var(--bar-border);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            border-radius: 24px;
-            display: flex; align-items: stretch;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
-            z-index: 1000; overflow: hidden;
-        }
-
-        /* SINISTRA: OROLOGIO E DATA */
-        .info-left {
-            flex: 0 0 160px;
-            background: rgba(20, 20, 25, 0.4); /* Leggera tinta per contrasto */
-            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 10; /* Sopra il testo che scorre */
-            border-right: 1px solid rgba(255,255,255,0.05);
-        }
-        #clock-time { font-size: 36px; font-weight: 800; line-height: 1; letter-spacing: -1px; }
-        #clock-date { font-size: 14px; font-weight: 600; opacity: 0.7; margin-top: 4px; }
-
-        /* CENTRO: SCORRIMENTO */
-        .info-center {
-            flex: 1; position: relative;
-            display: flex; align-items: center;
-            overflow: hidden;
-            mask-image: linear-gradient(to right, transparent 0%, black 20px, black calc(100% - 20px), transparent 100%);
-            -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20px, black calc(100% - 20px), transparent 100%);
-        }
-        .marquee-wrapper {
+        /* === NUOVI STILI PER MODALE ERRORE VIDEO === */
+        #video-error-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 2000;
             display: flex;
-            white-space: nowrap;
-            will-change: transform;
-            animation: marquee 40s linear infinite; /* Velocità regolabile */
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .marquee-content {
-            font-size: 32px; font-weight: 600; text-transform: uppercase;
-            padding-right: 100px; /* Spazio tra le ripetizioni */
-            display: inline-block;
+        #video-error-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
         }
-        @keyframes marquee {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+        .error-modal-content {
+            background: #1D1D1F; /* Stesso colore del pannello di controllo */
+            color: #F5F5F7;
+            padding: 30px 40px;
+            border-radius: 20px;
+            border: 1px solid #3A3A3C;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            transform: scale(0.95) translateY(20px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-
-        /* DESTRA: LOGO */
-        .info-right {
-            flex: 0 0 220px;
-            background: rgba(20, 20, 25, 0.4);
-            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+        #video-error-overlay.visible .error-modal-content {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
+        .error-modal-content .error-icon {
+            width: 60px; height: 60px;
+            background-color: rgba(255, 69, 58, 0.15);
+            color: #FF453A; /* Colore Danger */
+            border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            z-index: 10; /* Sopra il testo */
-            border-left: 1px solid rgba(255,255,255,0.05);
+            margin: 0 auto 20px auto;
         }
-        .bar-logo { max-width: 80%; max-height: 60%; filter: drop-shadow(0 0 8px rgba(255,255,255,0.2)); }
-
-        /* MODALE ERRORE / OFFLINE */
-        .overlay-msg {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.5s;
+        .error-modal-content .error-icon svg { width: 32px; height: 32px; }
+        .error-modal-content h2 {
+            font-size: 24px; font-weight: 700; margin: 0 0 10px 0;
         }
-        .overlay-msg.visible { opacity: 1; pointer-events: auto; }
-        .overlay-msg h1 { font-size: 40px; color: #FF453A; }
-
+        .error-modal-content p {
+            font-size: 16px; color: #86868B; margin: 0 0 25px 0;
+        }
+        .error-modal-content button {
+            width: 100%;
+            background: #0A84FF; /* Colore Blue */
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+        .error-modal-content button:hover {
+            filter: brightness(1.1);
+        }
+        /* === FINE STILI MODALE === */
     </style>
 </head>
 <body>
+    <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
+    <audio id="stop-announcement-sound" preload="auto" style="display:none;"></audio>
+    <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
 
-    <audio id="announcement-audio" src="/announcement-audio"></audio>
-    <audio id="stop-audio"></audio>
-    <audio id="booked-audio" src="/booked-stop-audio"></audio>
-
-    <div class="viewer-container">
-        <div class="left-panel">
+    <div id="loader">
+        <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
+        <p>CONNESSIONE AL SERVER...</p>
+    </div>
+    <div class="main-content-wrapper">
+        <div class="container">
             <div class="line-graphic">
-                <div class="line-number-circle"><span id="line-id">--</span></div>
-                <div class="line-path-vertical"></div>
-                <div class="stop-indicator"></div>
+                <div class="line-id-container"><span id="line-id">--</span></div>
+                <div id="stop-indicator" class="current-stop-indicator"></div>
             </div>
-            <div class="info-text-group">
-                <div class="lbl">Destinazione</div>
-                <div id="dest-name" class="val-dest">--</div>
-                <div class="lbl">Prossima Fermata</div>
-                <div id="stop-name" class="val-stop">--</div>
-                <div id="stop-sub" class="val-sub"></div>
+            <div class="text-content">
+                <p class="direction-header">DESTINAZIONE - DESTINATION</p>
+                <h1 id="direction-name"></h1>
+                <p class="next-stop-header">PROSSIMA FERMATA - NEXT STOP</p>
+                <h2 id="stop-name"></h2>
+                <p id="stop-subtitle"></p>
             </div>
         </div>
-        
-        <div class="right-panel">
-            <div class="video-frame" id="media-container">
-                </div>
+    </div>
+    <div class="video-wrapper">
+        <div id="video-player-container" class="aspect-ratio-16-9"></div>
+    </div>
+    
+    <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
+    <div id="service-offline-overlay">
+        <div class="overlay-content">
+            <h2>NESSUN SERVIZIO</h2>
+            <p>AL MOMENTO, IL SISTEMA NON È DISPONIBILE.</p>
         </div>
     </div>
 
-    <div class="info-bar">
-        <div class="info-left">
-            <div id="clock-time">--:--</div>
-            <div id="clock-date">--/--/--</div>
-        </div>
-        <div class="info-center">
-            <div class="marquee-wrapper" id="marquee-track">
-                <span class="marquee-content" id="marquee-text">BENVENUTI SU HARZAFI</span>
-                <span class="marquee-content" id="marquee-text-clone">BENVENUTI SU HARZAFI</span>
+    <div id="video-error-overlay">
+        <div class="error-modal-content">
+            <div class="error-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
             </div>
-        </div>
-        <div class="info-right">
-            <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Harzafi Logo" class="bar-logo">
+            <h2>Errore Caricamento</h2>
+            <p>Si è verificato un problema durante il caricamento del video. Il contenuto potrebbe essere danneggiato o non supportato.</p>
+            <button id="close-error-modal-btn">Chiudi</button>
         </div>
     </div>
-
-    <div id="offline-overlay" class="overlay-msg">
-        <h1>SERVIZIO NON DISPONIBILE</h1>
-        <p>Attendere connessione...</p>
-    </div>
-
-<script>
+    <script>
+document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
+    const videoPlayerContainer = document.getElementById('video-player-container');
+    const announcementSound = document.getElementById('announcement-sound');
+    const stopAnnouncementSound = document.getElementById('stop-announcement-sound'); // Nuovo selettore
+    const bookedSoundViewer = document.getElementById('booked-sound-viewer');
     
-    // Stato locale
-    let lastState = {};
-    
-    // Elementi DOM
-    const lineIdEl = document.getElementById('line-id');
-    const destNameEl = document.getElementById('dest-name');
-    const stopNameEl = document.getElementById('stop-name');
-    const stopSubEl = document.getElementById('stop-sub');
-    const mediaContainer = document.getElementById('media-container');
-    const offlineOverlay = document.getElementById('offline-overlay');
-    const marqueeText = document.getElementById('marquee-text');
-    const marqueeClone = document.getElementById('marquee-text-clone');
-    const clockTime = document.getElementById('clock-time');
-    const clockDate = document.getElementById('clock-date');
-    
-    // Audio
-    const audioAnnounce = document.getElementById('announcement-audio');
-    const audioStop = document.getElementById('stop-audio');
-    const audioBooked = document.getElementById('booked-audio');
+    // --- NUOVO SELETTORE PER MODALE ERRORE ---
+    const videoErrorOverlay = document.getElementById('video-error-overlay');
 
-    // --- OROLOGIO ITALIANO ---
-    function updateClock() {
-        const now = new Date();
-        // Opzioni per forzare il fuso orario italiano
-        const timeOptions = { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' };
-        const dateOptions = { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'Europe/Rome' };
-        
-        clockTime.textContent = now.toLocaleTimeString('it-IT', timeOptions);
-        clockDate.textContent = now.toLocaleDateString('it-IT', dateOptions);
+    const IMG_DEFAULT = 'https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg';
+    const IMG_NOT_AVAILABLE = 'https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg';
+    const IMG_LOADING = 'https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg';
+
+    let lastKnownState = {};
+    let currentMediaState = null;
+    let mediaTimeout = null;
+
+    // --- NUOVO LISTENER PER CHIUDERE IL MODALE ---
+    if (videoErrorOverlay) {
+        document.getElementById('close-error-modal-btn').addEventListener('click', () => {
+            videoErrorOverlay.classList.remove('visible');
+        });
     }
-    setInterval(updateClock, 1000);
-    updateClock(); // Prima esecuzione immediata
-
-    // --- LOGICA AGGIORNAMENTO DATI ---
-    socket.on('state_updated', (state) => updateDisplay(state));
-    socket.on('initial_state', (state) => updateDisplay(state));
-    socket.on('disconnect', () => offlineOverlay.classList.add('visible'));
-    socket.on('connect', () => {
-        offlineOverlay.classList.remove('visible');
-        socket.emit('request_initial_state');
-    });
-
-    function updateDisplay(state) {
-        if(!state.linesData) return;
-
-        // Gestione Offline manuale
-        if(state.serviceStatus === 'offline') offlineOverlay.classList.add('visible');
-        else offlineOverlay.classList.remove('visible');
-
-        const line = state.linesData[state.currentLineKey];
+    
+    function applyMediaPlaybackState(state) {
+        const videoEl = document.getElementById('ad-video');
+        const videoBgEl = document.getElementById('ad-video-bg');
         
-        // 1. Aggiornamento Testi (Solo se cambiati per animazione)
-        if(line) {
-            if(lineIdEl.textContent !== state.currentLineKey) lineIdEl.textContent = state.currentLineKey;
-            if(destNameEl.textContent !== line.direction) destNameEl.textContent = line.direction;
+        // Se non c'è un elemento video (es. è un iframe o un'immagine placeholder), non fare nulla
+        if (!videoEl && !videoPlayerContainer.querySelector('iframe')) return;
+        
+        // Se è un iframe embed, non possiamo controllare direttamente volume/riproduzione
+        if (videoPlayerContainer.querySelector('iframe')) return;
+
+        const newVolume = parseFloat(state.volumeLevel);
+        if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
+
+        if (state.playbackState === 'playing') {
+            if (videoEl.paused) videoEl.play().catch(e => {});
+            if (videoBgEl && videoBgEl.paused) videoBgEl.play().catch(e => {});
+        } else if (state.playbackState === 'paused') {
+            if (!videoEl.paused) videoEl.pause();
+            if (videoBgEl && !videoBgEl.paused) videoBgEl.pause();
+        }
+        
+        if (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0)) {
+            const newTime = videoEl.currentTime + state.seekAction.value;
+            const finalTime = Math.max(0, Math.min(newTime, isNaN(videoEl.duration) ? Infinity : videoEl.duration));
+            videoEl.currentTime = finalTime;
+            if (videoBgEl) {
+                videoBgEl.currentTime = finalTime;
+            }
+        }
+    }
+
+    function showMediaContent(html, stateToApply) {
+        if (mediaTimeout) clearTimeout(mediaTimeout);
+        
+        videoPlayerContainer.classList.remove('box-enter-animation');
+        videoPlayerContainer.classList.add('box-exit-animation');
+        
+        setTimeout(() => {
+            videoPlayerContainer.innerHTML = html;
+            videoPlayerContainer.classList.remove('box-exit-animation');
+            videoPlayerContainer.classList.add('box-enter-animation');
             
-            const currentStop = line.stops[state.currentStopIndex];
-            const stopText = currentStop ? currentStop.name : "CAPOLINEA";
-            const subText = currentStop ? (currentStop.subtitle || "") : "";
-
-            if(stopNameEl.textContent !== stopText) {
-                stopNameEl.classList.remove('fade-in-up');
-                stopNameEl.classList.add('fade-out-up');
-                stopSubEl.classList.add('fade-out-up');
+            const videoEl = document.getElementById('ad-video');
+            if (videoEl) {
+                // Aggiungiamo un event listener per la riproduzione in loop
+                videoEl.addEventListener('ended', () => {
+                    videoEl.currentTime = 0;
+                    videoEl.play().catch(e => console.error("Errore riavvio loop:", e));
+                });
                 
-                setTimeout(() => {
-                    stopNameEl.textContent = stopText;
-                    stopSubEl.textContent = subText;
-                    stopNameEl.classList.remove('fade-out-up');
-                    stopSubEl.classList.remove('fade-out-up');
-                    stopNameEl.classList.add('fade-in-up');
-                    stopSubEl.classList.add('fade-in-up');
-                    
-                    // Audio Fermata Automatica
-                    if(currentStop && currentStop.audio && state.currentStopIndex !== lastState.currentStopIndex) {
-                        audioStop.src = currentStop.audio;
-                        lowerVolumeAndPlay(audioStop);
-                    }
-                }, 400);
-            }
-        }
-
-        // 2. Aggiornamento Marquee (Messaggi)
-        const msgString = state.infoMessages.join(" • ");
-        if(marqueeText.textContent !== msgString) {
-            marqueeText.textContent = msgString;
-            marqueeClone.textContent = msgString; // Per il loop infinito CSS
-        }
-
-        // 3. Gestione Media
-        handleMedia(state);
-
-        // 4. Audio Eventi (Annuncio / Prenotazione)
-        if(state.announcement && state.announcement.timestamp > (lastState.announcement?.timestamp || 0)) {
-            lowerVolumeAndPlay(audioAnnounce);
-        }
-        if(state.stopRequested && state.stopRequested.timestamp > (lastState.stopRequested?.timestamp || 0)) {
-            audioBooked.currentTime = 0; audioBooked.play().catch(e=>{});
-        }
-
-        lastState = JSON.parse(JSON.stringify(state));
-    }
-
-    function handleMedia(state) {
-        // Se "Video Non Disponibile" è attivo forzatamente
-        if(state.videoNotAvailable) {
-            if(mediaContainer.dataset.type !== 'unavailable') {
-                mediaContainer.innerHTML = `<img src="https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg" alt="NA">`;
-                mediaContainer.dataset.type = 'unavailable';
-            }
-            return;
-        }
-
-        // Gestione sorgenti
-        if(state.mediaSource === 'server' && state.videoName) {
-            // Video Locale
-            if(mediaContainer.dataset.type !== 'local' || state.mediaLastUpdated !== lastState.mediaLastUpdated) {
-                const vidUrl = `/stream-video?t=${state.mediaLastUpdated}`;
-                mediaContainer.innerHTML = `
-                    <div class="video-bg-blur"><video src="${vidUrl}" muted loop playsinline autoplay></video></div>
-                    <video id="main-video" src="${vidUrl}" loop playsinline autoplay style="z-index:2;"></video>
-                `;
-                mediaContainer.dataset.type = 'local';
+                videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
                 
-                // Gestione errori video locale
-                const v = document.getElementById('main-video');
-                v.onerror = () => {
-                    // Fallback se errore caricamento
-                    mediaContainer.innerHTML = `<img src="https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg">`; 
-                    // Qui potremmo mostrare il modale errore, ma per pulizia teniamo l'immagine di default
+                // --- GESTIONE ERRORE MODIFICATA ---
+                videoEl.onerror = () => {
+                    console.error("Errore caricamento video locale.");
+                    loadMedia('error', stateToApply); // Chiama il nuovo stato 'error'
                 };
             }
-            // Sync Playback
-            const v = document.getElementById('main-video');
-            if(v) {
-                v.volume = parseFloat(state.volumeLevel);
-                if(state.playbackState === 'paused' && !v.paused) v.pause();
-                if(state.playbackState === 'playing' && v.paused) v.play().catch(()=>{});
-                // Seek check
-                if(state.seekAction && state.seekAction.timestamp > (lastState.seekAction?.timestamp || 0)) {
-                    v.currentTime += state.seekAction.value;
-                }
-            }
-        } else if (state.mediaSource === 'embed' && state.embedCode) {
-            // Embed
-            if(mediaContainer.dataset.type !== 'embed') {
-                mediaContainer.innerHTML = state.embedCode;
-                mediaContainer.dataset.type = 'embed';
-            }
-        } else {
-            // Default
-            if(mediaContainer.dataset.type !== 'default') {
-                mediaContainer.innerHTML = `<img src="https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg">`;
-                mediaContainer.dataset.type = 'default';
-            }
-        }
+        }, 600);
     }
 
-    function lowerVolumeAndPlay(audioEl) {
-        const vid = document.getElementById('main-video');
-        const oldVol = vid ? vid.volume : 1;
-        if(vid) vid.volume = Math.min(oldVol, 0.1);
+    function loadMedia(targetState, state) {
+        if (currentMediaState === targetState && targetState !== 'loading') {
+            return;
+        }
+        currentMediaState = targetState;
+        let contentHtml = '';
+
+        switch (targetState) {
+            case 'not_available':
+                contentHtml = `<img src="${IMG_NOT_AVAILABLE}" class="placeholder-image" alt="Contenuto non disponibile">`;
+                showMediaContent(contentHtml, state);
+                break;
+            
+            case 'default':
+                contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
+                showMediaContent(contentHtml, state);
+                break;
+
+            case 'loading':
+                contentHtml = `<img src="${IMG_LOADING}" class="placeholder-image" alt="Caricamento in corso...">`;
+                showMediaContent(contentHtml, state);
+                
+                mediaTimeout = setTimeout(() => {
+                    if (currentMediaState === 'loading') {
+                        const nextState = state.mediaSource === 'server' ? 'server' : 'embed';
+                        loadMedia(nextState, state);
+                    }
+                }, 1500);
+                break;
+                
+            case 'server':
+                // La query string previene la cache del browser dopo un nuovo upload
+                const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
+                contentHtml = `
+                    <div class="video-background-blur">
+                        <video id="ad-video-bg" loop playsinline muted src="${videoUrl}"></video>
+                    </div>
+                    <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
+                showMediaContent(contentHtml, state);
+                break;
+                
+            case 'embed':
+                contentHtml = state.embedCode;
+                showMediaContent(contentHtml, state);
+                break;
+                
+            // --- NUOVA GESTIONE 'error' ---
+            case 'error':
+                console.log("Stato errore: mostro modale di errore.");
+                // Invece di mostrare l'immagine 404 per 10s,
+                // mostriamo l'immagine DI DEFAULT e apriamo il modale.
+                
+                // 1. Mostra il placeholder di default
+                contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
+                showMediaContent(contentHtml, state);
+                
+                // 2. Apri il modale di errore
+                if (videoErrorOverlay) {
+                    videoErrorOverlay.classList.add('visible');
+                }
+                
+                // Rimuoviamo il vecchio timeout di 10 secondi
+                if (mediaTimeout) clearTimeout(mediaTimeout);
+                break;
+        }
+    }
+    
+    const loaderEl = document.getElementById('loader');
+    const containerEl = document.querySelector('.container');
+    const logoEl = document.querySelector('.logo');
+    const lineIdEl = document.getElementById('line-id');
+    const directionNameEl = document.getElementById('direction-name');
+    const stopNameEl = document.getElementById('stop-name');
+    const stopSubtitleEl = document.getElementById('stop-subtitle');
+    const stopIndicatorEl = document.getElementById('stop-indicator');
+    const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
+
+    // Funzione per audio LINEA (manuale)
+    function playAnnouncement() {
+        const videoEl = document.getElementById('ad-video');
+        const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
         
-        audioEl.currentTime = 0;
-        audioEl.play().catch(e => console.log("Autoplay bloccato", e));
+        if (videoEl && !videoEl.muted) {
+            videoEl.volume = Math.min(originalVolume, 0.15);
+        }
         
-        audioEl.onended = () => {
-            if(vid) vid.volume = oldVol;
+        announcementSound.currentTime = 0;
+        announcementSound.play().catch(e => console.error("Errore riproduzione annuncio:", e));
+        
+        announcementSound.onended = () => {
+            if (videoEl) {
+                videoEl.volume = originalVolume;
+            }
         };
     }
 
+    function adjustFontSize(element) {
+        const maxFontSize = 112; const minFontSize = 40;
+        element.style.fontSize = maxFontSize + 'px'; let currentFontSize = maxFontSize;
+        while ((element.scrollWidth > element.parentElement.clientWidth || element.scrollHeight > element.parentElement.clientHeight) && currentFontSize > minFontSize) {
+            currentFontSize -= 2; element.style.fontSize = currentFontSize + 'px';
+        }
+    }
+
+    function checkServiceStatus(state) {
+        const isOffline = state.serviceStatus === 'offline';
+        const isVisible = serviceOfflineOverlay.classList.contains('visible');
+
+        if (isOffline && !isVisible) {
+            serviceOfflineOverlay.classList.remove('hiding');
+            serviceOfflineOverlay.classList.add('visible');
+        } else if (!isOffline && isVisible) {
+            serviceOfflineOverlay.classList.add('hiding');
+            serviceOfflineOverlay.addEventListener('animationend', () => {
+                if (serviceOfflineOverlay.classList.contains('hiding')) {
+                   serviceOfflineOverlay.classList.remove('visible', 'hiding');
+                }
+            }, { once: true });
+        } else if (isOffline && isVisible) {
+             serviceOfflineOverlay.classList.remove('hiding');
+        }
+        return !isOffline;
+    }
+    
+    /**
+     * =============================================
+     * FUNZIONE updateDisplay (CON LOGICA AUDIO STOP)
+     * =============================================
+     */
+    function updateDisplay(state) {
+        if (!checkServiceStatus(state) || !state.linesData) {
+            return;
+        }
+
+        const isInitialLoad = !lastKnownState.currentLineKey && state.currentLineKey;
+        
+        loaderEl.classList.add('hidden');
+        containerEl.classList.add('visible');
+        logoEl.classList.add('visible');
+        
+        const line = state.linesData[state.currentLineKey];
+        if (line) {
+            const stop = line.stops[state.currentStopIndex];
+            const lineChanged = lastKnownState.currentLineKey !== state.currentLineKey;
+            const stopIndexChanged = lastKnownState.currentStopIndex !== state.currentStopIndex;
+
+            const updateContent = () => {
+                lineIdEl.textContent = state.currentLineKey;
+                directionNameEl.textContent = line.direction;
+                stopNameEl.textContent = stop ? stop.name : 'CAPOLINEA';
+                stopSubtitleEl.textContent = stop ? (stop.subtitle || '') : '';
+                adjustFontSize(stopNameEl);
+            };
+
+            if (!isInitialLoad && (lineChanged || stopIndexChanged)) {
+                const direction = (stopIndexChanged && state.currentStopIndex < lastKnownState.currentStopIndex) ? 'prev' : 'next';
+                stopIndicatorEl.className = 'current-stop-indicator exit';
+                stopNameEl.className = 'exit';
+                setTimeout(() => {
+                    updateContent(); // Aggiorna il testo
+
+                    // === LOGICA AUDIO STOP (automatico) ===
+                    const newStop = line.stops[state.currentStopIndex]; // Prendi il *nuovo* stop
+                    if (newStop && newStop.audio) {
+                        // L'audio è caricato come Data URL (Base64)
+                        stopAnnouncementSound.src = newStop.audio;
+                        stopAnnouncementSound.currentTime = 0;
+                        
+                        const videoEl = document.getElementById('ad-video');
+                        const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
+                        
+                        // Abbassa il volume del video se è presente
+                        if (videoEl && !videoEl.muted) {
+                            videoEl.volume = Math.min(originalVolume, 0.15);
+                        }
+                        
+                        stopAnnouncementSound.play().catch(e => console.error("Errore riproduzione audio fermata:", e));
+                        
+                        stopAnnouncementSound.onended = () => {
+                            if (videoEl) videoEl.volume = originalVolume;
+                        };
+                    }
+                    // === FINE LOGICA AUDIO STOP ===
+
+                    stopIndicatorEl.classList.remove('exit');
+                    stopNameEl.classList.remove('exit');
+                    const enterClass = (direction === 'prev') ? 'enter-reverse' : 'enter';
+                    stopIndicatorEl.classList.add(enterClass);
+                    stopNameEl.classList.add('enter');
+                    setTimeout(() => {
+                        stopIndicatorEl.classList.remove('enter', 'enter-reverse');
+                        stopNameEl.classList.remove('enter');
+                    }, 500);
+                }, 400);
+            } else {
+                updateContent(); // Caricamento iniziale, nessun audio
+            }
+        }
+
+        // Annuncio LINEA (manuale)
+        if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
+            playAnnouncement();
+        }
+
+        // Audio PRENOTAZIONE
+        if (state.stopRequested && state.stopRequested.timestamp > (lastKnownState.stopRequested?.timestamp || 0)) {
+            if (bookedSoundViewer) {
+                bookedSoundViewer.currentTime = 0;
+                bookedSoundViewer.play().catch(e => console.error("Errore riproduzione 'bip' prenotazione:", e));
+            }
+        }
+
+        // === LOGICA GESTIONE MEDIA ===
+        const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
+        const notAvailableChanged = state.videoNotAvailable !== lastKnownState.videoNotAvailable;
+        const playbackChanged = state.playbackState !== lastKnownState.playbackState ||
+                                  state.volumeLevel !== lastKnownState.volumeLevel ||
+                                  (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0));
+
+        let targetMediaState = ''; // Lo stato che VOGLIAMO raggiungere
+        
+        if (state.videoNotAvailable) {
+            // Caso 1: Priorità massima, "Non Disponibile" è ATTIVO
+            targetMediaState = 'not_available';
+        } else {
+            // Caso 2: "Non Disponibile" è DISATTIVATO. Decidiamo cosa mostrare.
+            if (mediaChanged) {
+                // È appena stato aggiunto/rimosso un media
+                if (state.mediaSource) {
+                    targetMediaState = 'loading'; // Media Aggiunto
+                } else {
+                    targetMediaState = 'default'; // Media Rimosso
+                }
+            } else if (currentMediaState === null || (notAvailableChanged && currentMediaState === 'not_available')) {
+                // È il caricamento iniziale O il toggle "non disponibile" è stato SPENTO
+                if (state.mediaSource) {
+                    targetMediaState = 'loading';
+                } else {
+                    targetMediaState = 'default';
+                }
+            } else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
+                // Caso 3: Solo il playback è cambiato (play/pausa/volume/seek), non serve un reload
+                 applyMediaPlaybackState(state);
+            }
+        }
+        
+        if (targetMediaState && targetMediaState !== currentMediaState) {
+            loadMedia(targetMediaState, state);
+        }
+        // === FINE LOGICA MEDIA ===
+        
+        lastKnownState = JSON.parse(JSON.stringify(state));
+    }
+    
+    socket.on('connect', () => {
+        loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
+        socket.emit('request_initial_state');
+    });
+    socket.on('disconnect', () => {
+        loaderEl.classList.remove('hidden');
+        loaderEl.querySelector('p').textContent = "Connessione persa...";
+    });
+    socket.on('initial_state', updateDisplay);
+    socket.on('state_updated', updateDisplay);
+});
 </script>
 </body>
 </html>
 """
 
 # -------------------------------------------------------------------
-# 4. ROUTES & API (INVARIATE PER FUNZIONALITA', ADATTATE PER SICUREZZA)
+# 4. ROUTE E API WEBSOCKET (MODIFICATO)
 # -------------------------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated: return redirect(url_for('dashboard'))
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
     form = LoginForm()
+
     if form.validate_on_submit():
         username = form.username.data
-        # Lockout logic semplificata qui per brevità (presente nella versione precedente)
-        user_db = USERS_DB.get(username)
-        if user_db and check_password_hash(user_db['password_hash'], form.password.data):
-            login_user(get_user(username))
-            return redirect(url_for('dashboard'))
+
+        if username in login_attempts:
+            attempt_info = login_attempts[username]
+            if attempt_info['attempts'] >= MAX_ATTEMPTS:
+                lockout_end_time = attempt_info['time'] + timedelta(minutes=LOCKOUT_TIME_MINUTES)
+                if datetime.now() < lockout_end_time:
+                    remaining_time = round((lockout_end_time - datetime.now()).total_seconds())
+                    flash(f"Troppi tentativi falliti. Riprova tra {remaining_time} secondi.", "error")
+                    return render_template_string(LOGIN_PAGE_HTML, form=form)
+                else:
+                    login_attempts.pop(username, None)
+
+        user_in_db = USERS_DB.get(username)
+        if user_in_db and check_password_hash(user_in_db['password_hash'], form.password.data):
+            login_attempts.pop(username, None)
+            user = get_user(username)
+            login_user(user)
+            return redirect(request.args.get('next') or url_for('dashboard'))
         else:
-            flash("Credenziali errate", "error")
+            if username not in login_attempts:
+                login_attempts[username] = {'attempts': 0, 'time': None}
+            
+            login_attempts[username]['attempts'] += 1
+            login_attempts[username]['time'] = datetime.now()
+
+            remaining = MAX_ATTEMPTS - login_attempts[username]['attempts']
+            if remaining > 0:
+                flash(f"Credenziali non valide. Hai ancora {remaining} tentativi.", "error")
+            else:
+                flash(f"Account bloccato per {LOCKOUT_TIME_MINUTES} minuti.", "error")
+            
+            return render_template_string(LOGIN_PAGE_HTML, form=form)
+    
     return render_template_string(LOGIN_PAGE_HTML, form=form)
+
 
 @app.route('/logout')
 @login_required
@@ -955,80 +1867,143 @@ def dashboard():
 @app.route('/visualizzatore')
 @login_required
 def pagina_visualizzatore():
+    # Passiamo il template modificato
     return render_template_string(VISUALIZZATORE_COMPLETO_HTML)
 
-# --- FILE SERVING ---
 @app.route('/announcement-audio')
 @login_required
 def announcement_audio():
-    # Fallback se il file non esiste (evita crash)
-    try: return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
-    except: return Response("File missing", 404)
+    try:
+        return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
+    except FileNotFoundError:
+        print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
+        return Response("File audio dell'annuncio non trovato sul server.", status=404)
 
 @app.route('/booked-stop-audio')
 @login_required
 def booked_stop_audio():
-    try: return send_file('bip.mp3', mimetype='audio/mpeg') # Assicurati di avere un file bip.mp3 o rimuovi questa chiamata
-    except: return Response("File missing", 404)
+    try:
+        return send_file('bip.mp3', mimetype='audio/mpeg')
+    except FileNotFoundError:
+        print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
+        return Response("File audio di prenotazione non trovato sul server.", status=404)
 
 @app.route('/upload-video', methods=['POST'])
 @login_required
 def upload_video():
     global current_video_file
-    if 'video' not in request.files: return jsonify({'error': 'No file'}), 400
-    f = request.files['video']
-    if f.filename == '': return jsonify({'error': 'No filename'}), 400
+    if 'video' not in request.files: return jsonify({'error': 'Nessun file inviato'}), 400
+    file = request.files['video']
+    if file.filename == '': return jsonify({'error': 'Nessun file selezionato'}), 400
     
-    # Pulizia vecchio file
+    # --- MODIFICA: Salva su disco, non in memoria ---
+    # 1. Rimuovi il vecchio video se esiste
     if current_video_file['path'] and os.path.exists(current_video_file['path']):
-        try: os.remove(current_video_file['path'])
-        except: pass
-        
+        try:
+            os.remove(current_video_file['path'])
+        except Exception as e:
+            print(f"Errore rimozione vecchio file: {e}")
+
+    # 2. Salva il nuovo file in una directory temporanea
     try:
-        fd, path = tempfile.mkstemp(suffix=f"_{f.filename}")
-        os.close(fd)
-        f.save(path)
-        current_video_file = {'path': path, 'mimetype': f.mimetype, 'name': f.filename}
-        return jsonify({'success': True})
+        # Crea un nome file temporaneo sicuro
+        temp_dir = tempfile.gettempdir()
+        # Usiamo mkstemp per avere un nome unico, poi lo chiudiamo e usiamo il path
+        fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix=f"_{file.filename}")
+        os.close(fd) # Chiudiamo il file descriptor, useremo solo il path
+        
+        file.save(temp_path) # Salva il file in quel path
+        
+        current_video_file = {'path': temp_path, 'mimetype': file.mimetype, 'name': file.filename}
+        print(f"Video salvato in: {temp_path}")
+        return jsonify({'success': True, 'filename': file.filename})
+
     except Exception as e:
-        print(e)
-        return jsonify({'error': 'Save failed'}), 500
+        print(f"Errore salvataggio file: {e}")
+        return jsonify({'error': 'Errore salvataggio file su server'}), 500
+    # --- FINE MODIFICA ---
 
 @app.route('/stream-video')
 @login_required
 def stream_video():
-    if not current_video_file['path'] or not os.path.exists(current_video_file['path']): abort(404)
-    return send_file(current_video_file['path'], mimetype=current_video_file['mimetype'])
+    # --- MODIFICA CHIAVE PER STREAMING DA DISCO ---
+    # Il codice precedente (lettura da memoria con gestione manuale del Range) 
+    # è stato sostituito da send_file, che è molto più robusto.
+    if not current_video_file or not current_video_file['path'] or not os.path.exists(current_video_file['path']):
+        print("Errore stream: file non trovato")
+        abort(404)
+
+    try:
+        # send_file gestisce automaticamente i 'Range headers' (206 Partial Content)
+        # consentendo lo streaming e il seeking di file di grandi dimensioni.
+        return send_file(
+            current_video_file['path'], 
+            mimetype=current_video_file['mimetype'], 
+            as_attachment=False # Importante per il player video
+        )
+    except Exception as e:
+        print(f"Errore durante lo streaming del file: {e}")
+        abort(500)
+    # --- FINE MODIFICA ---
 
 @app.route('/clear-video', methods=['POST'])
 @login_required
 def clear_video():
     global current_video_file
+    # --- MODIFICA: Rimuovi file da disco ---
     if current_video_file['path'] and os.path.exists(current_video_file['path']):
-        try: os.remove(current_video_file['path'])
-        except: pass
+        try:
+            os.remove(current_video_file['path'])
+            print(f"File rimosso: {current_video_file['path']}")
+        except Exception as e:
+            print(f"Errore rimozione file: {e}")
+    # --- FINE MODIFICA ---
     current_video_file = {'path': None, 'mimetype': None, 'name': None}
     return jsonify({'success': True})
 
-# --- SOCKET EVENTS ---
+# --- GESTIONE WEBSOCKET (Invariato) ---
+
 @socketio.on('connect')
 def handle_connect():
     if not current_user.is_authenticated: return False
-    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
+    print(f"Client autorizzato connesso: {current_user.name} ({request.sid})")
+    if current_app_state: 
+        socketio.emit('initial_state', current_app_state, room=request.sid)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    if hasattr(current_user, 'name'): print(f"Client {current_user.name} disconnesso.")
 
 @socketio.on('update_all')
-def handle_update(data):
+def handle_update_all(data):
     if not current_user.is_authenticated: return
     global current_app_state
-    if not current_app_state: current_app_state = {}
+    if current_app_state is None: current_app_state = {}
     current_app_state.update(data)
     socketio.emit('state_updated', current_app_state, skip_sid=request.sid)
 
 @socketio.on('request_initial_state')
-def req_init():
+def handle_request_initial_state():
     if not current_user.is_authenticated: return
-    socketio.emit('initial_state', current_app_state, room=request.sid)
+    if current_app_state: 
+        socketio.emit('initial_state', current_app_state, room=request.sid)
+
+# -------------------------------------------------------------------
+# 5. BLOCCO DI ESECUZIONE
+# -------------------------------------------------------------------
 
 if __name__ == '__main__':
-    print("--- HARZAFI SERVER v18 ---")
-    socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    local_ip = get_local_ip()
+    print("===================================================================")
+    print("   SERVER HARZAFI v17 (STREAMING DA DISCO E MODALE ERRORE)")
+    print("===================================================================")
+    print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
+    print("Credenziali di default: admin / adminpass")
+    print("===================================================================")
+    try:
+        # Per un ambiente di produzione, si raccomanda l'uso di gunicorn/eventlet
+        socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    except ImportError:
+        print("\n--- ATTENZIONE: 'eventlet' non trovato. Eseguo in modalità standard. ---")
+        print("--- Per la produzione, assicurati di averlo installato. ---")
+        socketio.run(app, host='0.0.0.0', port=5000)
