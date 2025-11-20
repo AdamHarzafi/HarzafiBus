@@ -66,6 +66,10 @@ def load_user(user_id):
 
 @app.after_request
 def add_security_headers(response):
+    # QUESTA FUNZIONE (già presente) è CORRETTA.
+    # Impedisce al browser di salvare le pagine nella cache.
+    # Se l'utente preme "Indietro", il browser è costretto a 
+    # richiedere la pagina al server, che verificherà di nuovo il login.
     if request.path != '/login' and not request.path.startswith('/static'):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
@@ -88,6 +92,7 @@ def get_local_ip():
 # -------------------------------------------------------------------
 # 2. STATO GLOBALE DELL'APPLICAZIONE
 # -------------------------------------------------------------------
+# Stato predefinito per evitare schermata vuota all'avvio
 current_app_state = {
     "linesData": {},
     "currentLineKey": None,
@@ -100,18 +105,20 @@ current_app_state = {
     "playbackState": "playing",
     "seekAction": None,
     "infoMessages": [],
-    "serviceStatus": "online", 
-    "videoNotAvailable": False, 
+    "serviceStatus": "online", # Default 'online'
+    "videoNotAvailable": False, # Default 'false'
     "announcement": None,
     "stopRequested": None
 }
+# --- MODIFICA: Salviamo il PERCORSO del file, non i dati in memoria ---
 current_video_file = {'path': None, 'mimetype': None, 'name': None}
+# --- FINE MODIFICA ---
 
 # -------------------------------------------------------------------
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
 # -------------------------------------------------------------------
 
-# --- PAGINA DI LOGIN ---
+# --- PAGINA DI LOGIN (FUNZIONANTE) ---
 LOGIN_PAGE_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -160,6 +167,7 @@ LOGIN_PAGE_HTML = """
             transition: border-color 0.2s, box-shadow 0.2s;
         }
         input:focus { outline: none; border-color: var(--accent-color-end); box-shadow: 0 0 0 4px rgba(162, 68, 167, 0.2); }
+        input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111827 inset !important; -webkit-text-fill-color: var(--text-primary) !important;}
         .password-wrapper { position: relative; }
         #password-toggle {
             position: absolute; top: 50%; right: 14px; transform: translateY(-50%);
@@ -172,6 +180,7 @@ LOGIN_PAGE_HTML = """
             transition: transform 0.2s, box-shadow 0.2s;
         }
         button[type="submit"]:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(138, 35, 135, 0.25); }
+        button[type="submit"]:disabled { background: #4B5563; cursor: not-allowed; transform: none; box-shadow: none; }
     </style>
 </head>
 <body>
@@ -182,6 +191,7 @@ LOGIN_PAGE_HTML = """
             {% if messages %}
                 {% for category, message in messages %}
                     <div class="flash-message {{ category }}">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 0 24 24" width="20px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
                         <span>{{ message }}</span>
                     </div>
                 {% endfor %}
@@ -197,16 +207,36 @@ LOGIN_PAGE_HTML = """
                 {{ form.password.label(for="password") }}
                 <div class="password-wrapper">
                     {{ form.password(id="password", class="form-control", required=True) }}
+                    <button type="button" id="password-toggle" title="Mostra/Nascondi password">
+                        <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 4C7 4 2.73 7.11 1 11.5 2.73 15.89 7 19 12 19s9.27-3.11 11-7.5C21.27 7.11 17 4 12 4zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                        <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 6.5c2.76 0 5 2.24 5 5 0 .69-.14 1.35-.38 1.96l1.56 1.56c.98-1.29 1.82-2.88 2.32-4.52C19.27 7.11 15 4 12 4c-1.27 0-2.49 .2-3.64.57l1.65 1.65c.61-.24 1.27-.37 1.99-.37zm-1.07 1.07L8.98 5.62C10.03 5.2 11 5 12 5c2.48 0 4.75.99 6.49 2.64l-1.42 1.42c-.63-.63-1.42-1.06-2.29-1.28l-1.78 1.78zm-3.8 3.8l-1.57-1.57C4.6 10.79 3.66 11.5 3 12.5c1.73 4.39 6 7.5 9 7.5 1.33 0 2.6-.25 3.77-.69l-1.63-1.63c-.67 .24-1.38 .37-2.14 .37-2.76 0-5-2.24-5-5 0-.76 .13-1.47 .37-2.14zM2.14 2.14L.73 3.55l2.09 2.09C2.01 6.62 1.35 7.69 1 9c1.73 4.39 6 7.5 9 7.5 1.55 0 3.03-.3 4.38-.84l2.06 2.06 1.41-1.41L2.14 2.14z"/></svg>
+                    </button>
                 </div>
             </div>
             <button type="submit">Accedi</button>
         </form>
     </div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const passwordInput = document.getElementById('password');
+        const toggleButton = document.getElementById('password-toggle');
+        const eyeOpen = document.getElementById('eye-open');
+        const eyeClosed = document.getElementById('eye-closed');
+        if (toggleButton) {
+            toggleButton.addEventListener('click', () => {
+                const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passwordInput.setAttribute('type', type);
+                eyeOpen.style.display = type === 'password' ? 'block' : 'none';
+                eyeClosed.style.display = type === 'password' ? 'none' : 'block';
+            });
+        }
+    });
+</script>
 </body>
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO ---
+# --- PANNELLO DI CONTROLLO (MODIFICATO) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -323,29 +353,71 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -6px; width: 16px; height: 16px; background: var(--text-primary); border-radius: 50%; border: none; }
         #media-controls-container.disabled { opacity: 0.4; pointer-events: none; }
 
-        .preview-wrapper { max-width: 720px; margin: 0 auto 20px auto; }
-        .viewer-preview-container {
-            position: relative; width: 100%; padding-top: 56.25%; /* Aspect Ratio 16:9 */
-            background-color: #000; border-radius: 16px; overflow: hidden;
-            border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        .preview-wrapper {
+            max-width: 720px;
+            margin: 0 auto 20px auto;
         }
-        .viewer-preview-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
-        .preview-controls { display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
-        .preview-controls .btn { width: auto; flex-shrink: 0; }
+        .viewer-preview-container {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* Aspect Ratio 16:9 */
+            background-color: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .viewer-preview-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+        .preview-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .preview-controls .btn {
+            width: auto;
+            flex-shrink: 0;
+        }
         
-        /* === STILI EDITOR FERMATE === */
+        /* === NUOVI STILI PER EDITOR FERMATE === */
         .stop-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
         .stop-inputs { flex-grow: 1; display: flex; gap: 10px; }
         .stop-inputs input { width: 100%; }
         .audio-upload-btn {
-            width: 40px !important; height: 40px; padding: 8px !important;
-            flex-shrink: 0; border-radius: 50% !important; line-height: 1;
-            border: 2px solid; display: flex; align-items: center; justify-content: center;
+            width: 40px !important; /* Sovrascrive .btn */
+            height: 40px;
+            padding: 8px !important;
+            flex-shrink: 0;
+            border-radius: 50% !important;
+            line-height: 1;
+            border: 2px solid;
+            display: flex; align-items: center; justify-content: center;
         }
-        .audio-upload-btn.status-red { background-color: var(--danger); border-color: rgba(255,255,255,0.3); color: white; }
-        .audio-upload-btn.status-green { background-color: var(--success); border-color: rgba(255,255,255,0.3); color: white; }
+        .audio-upload-btn.status-red {
+            background-color: var(--danger);
+            border-color: rgba(255,255,255,0.3);
+            color: white;
+        }
+        .audio-upload-btn.status-green {
+            background-color: var(--success);
+            border-color: rgba(255,255,255,0.3);
+            color: white;
+        }
         .audio-upload-btn svg { width: 20px; height: 20px; }
-        .remove-stop-btn { width: 40px !important; height: 40px; padding: 8px !important; flex-shrink: 0; }
+        .remove-stop-btn {
+            width: 40px !important;
+            height: 40px;
+            padding: 8px !important;
+            flex-shrink: 0;
+        }
+        /* === FINE NUOVI STILI === */
     </style>
 </head>
 <body>
@@ -381,6 +453,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
 
         <section class="control-section">
             <h2>Controlli Principali</h2>
+            <p class="subtitle">Modifica la linea, naviga tra le fermate e gestisci lo stato del servizio.</p>
             <div class="grid">
                  <div class="control-group">
                     <label for="line-selector">Linea Attiva</label>
@@ -407,15 +480,31 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                     <label>Annuncio Vocale</label>
                     <button id="announce-btn" title="Annuncia" class="btn-primary" style="padding: 12px;">ANNUNCIA LINEA.</button>
                 </div>
+                
                 <div class="control-group">
                     <label>Prenotazione Fermata</label>
                     <button id="booked-btn" class="btn-primary" style="padding: 12px;">PRENOTA FERMATA</button>
                 </div>
+
             </div>
         </section>
 
         <section class="control-section">
+            <h2>Anteprima Interattiva</h2>
+            <p class="subtitle">Questa è un'anteprima live e interattiva. Puoi cliccare e interagire direttamente con gli elementi al suo interno.</p>
+            <div class="preview-wrapper">
+                <div class="viewer-preview-container">
+                    <iframe id="viewer-iframe-preview" src="{{ url_for('pagina_visualizzatore') }}" frameborder="0"></iframe>
+                </div>
+            </div>
+            <div class="preview-controls">
+                <button id="toggle-preview-playback-btn" class="btn btn-secondary">▶ Riproduci in anteprima</button>
+                <a href="{{ url_for('pagina_visualizzatore') }}" target="_blank" class="btn btn-secondary">Apri in Schermo Intero</a>
+            </div>
+        </section>
+        <section class="control-section">
             <h2>Gestione Media e Messaggi</h2>
+             <p class="subtitle">Carica contenuti video, controlla la riproduzione o imposta messaggi a scorrimento.</p>
              <div class="grid">
                  <div>
                     <label for="embed-code-input">Codice Embed (iframe)</label>
@@ -453,12 +542,14 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                             <span class="slider"></span>
                         </label>
                     </div>
+                    <p style="font-size: 13px; color: var(--text-secondary); margin-top: 10px;">Forza la visualizzazione di un'immagine "non disponibile" sul viewer.</p>
                  </div>
              </div>
         </section>
 
         <section class="control-section">
             <h2>Gestione Linee</h2>
+            <p class="subtitle">Crea, modifica o elimina le linee e le relative fermate.</p>
             <ul id="line-management-list" class="line-list"></ul>
             <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
                  <button id="add-new-line-btn" class="btn-success" style="flex-grow: 1;">+ Aggiungi Nuova Linea</button>
@@ -484,17 +575,31 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             </div>
         </form>
     </dialog>
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
-    // ... (Logica JS identica alla precedente, non modificata per brevità ma inclusa nel file finale) ...
-    // Per garantire il funzionamento completo, includo la logica essenziale qui sotto:
-    
-    function handleAuthError() { window.location.href = "{{ url_for('login') }}"; }
-    async function fetchAuthenticated(url, options) {
-        try { const r = await fetch(url, options); if(r.status===401||r.redirected){handleAuthError();return null;} return r; } 
-        catch(e){alert("Errore connessione");return null;}
+
+    function handleAuthError() {
+        alert("Sessione scaduta o non valida. Verrai reindirizzato alla pagina di login.");
+        window.location.href = "{{ url_for('login') }}";
     }
+
+    async function fetchAuthenticated(url, options) {
+        try {
+            const response = await fetch(url, options);
+            if (response.status === 401 || response.redirected) { 
+                handleAuthError();
+                return null;
+            }
+            return response;
+        } catch (error) {
+            console.error("Errore di rete:", error);
+            alert("Errore di connessione con il server.");
+            return null;
+        }
+    }
+
     function sendFullStateUpdate() {
         if (!socket.connected) return;
         const state = {
@@ -513,57 +618,576 @@ document.addEventListener('DOMContentLoaded', () => {
             stopRequested: JSON.parse(localStorage.getItem('busSystem-stopRequested') || 'null')
         };
         socket.emit('update_all', state);
+        // Reset one-time actions
         if (state.announcement) localStorage.removeItem('busSystem-playAnnouncement');
         if (state.stopRequested) localStorage.removeItem('busSystem-stopRequested');
         if (state.seekAction) localStorage.removeItem('busSystem-seekAction');
     }
-    // Variabili e riferimenti DOM
-    let linesData={}, currentLineKey=null, currentStopIndex=0, serviceStatus='online', videoNotAvailable=false;
-    const lineSelector = document.getElementById('line-selector');
-    
-    // Funzioni base (loadData, saveData, renderAll, ecc.)
-    function loadData() { linesData = JSON.parse(localStorage.getItem('busSystem-linesData')) || {}; renderAll(); }
-    function saveData() { localStorage.setItem('busSystem-linesData', JSON.stringify(linesData)); sendFullStateUpdate(); }
-    
-    // Inizializzazione semplificata
-    loadData();
-    
-    // Gestori eventi principali (collegati come nel codice originale)
-    document.getElementById('prev-btn').addEventListener('click', () => { if(currentStopIndex>0) {currentStopIndex--; saveData();}});
-    document.getElementById('next-btn').addEventListener('click', () => { if(linesData[currentLineKey] && currentStopIndex<linesData[currentLineKey].stops.length-1) {currentStopIndex++; saveData();}});
-    
-    // (Nota: Questo script nel pannello è un riassunto funzionale per mantenere il file leggibile. 
-    // La logica completa è stata mantenuta nel backend e nelle interazioni socket).
-    
-    // Gestione Video Upload
+
+    const importVideoBtn = document.getElementById('import-video-btn');
     const videoImporter = document.getElementById('video-importer');
-    document.getElementById('import-video-btn').addEventListener('click', () => videoImporter.click());
-    videoImporter.addEventListener('change', async (e) => {
-        const file = e.target.files[0]; if(!file) return;
+    const importEmbedBtn = document.getElementById('import-embed-btn');
+    const embedCodeInput = document.getElementById('embed-code-input');
+    const removeMediaBtn = document.getElementById('remove-media-btn');
+    const mediaUploadStatusText = document.getElementById('media-upload-status');
+    const lineSelector = document.getElementById('line-selector');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const announceBtn = document.getElementById('announce-btn');
+    const lineManagementList = document.getElementById('line-management-list');
+    const addNewLineBtn = document.getElementById('add-new-line-btn');
+    const modal = document.getElementById('line-editor-modal');
+    const lineEditorForm = document.getElementById('line-editor-form');
+    const editLineId = document.getElementById('edit-line-id');
+    const lineNameInput = document.getElementById('line-name');
+    const lineDirectionInput = document.getElementById('line-direction');
+    const stopsListContainer = document.getElementById('stops-list');
+    const addStopBtn = document.getElementById('add-stop-btn');
+    const statusLineName = document.getElementById('status-line-name');
+    const statusLineDirection = document.getElementById('status-line-direction');
+    const statusStopName = document.getElementById('status-stop-name');
+    const statusStopSubtitle = document.getElementById('status-stop-subtitle');
+    const statusProgress = document.getElementById('status-progress');
+    const infoMessagesInput = document.getElementById('info-messages-input');
+    const saveMessagesBtn = document.getElementById('save-messages-btn');
+    const serviceStatusToggle = document.getElementById('service-status-toggle');
+    const serviceStatusText = document.getElementById('service-status-text');
+    const resetDataBtn = document.getElementById('reset-data-btn');
+    const bookedBtn = document.getElementById('booked-btn');
+    const videoNotAvailableToggle = document.getElementById('video-not-available-toggle');
+    const videoNotAvailableStatusText = document.getElementById('video-not-available-status-text');
+    const mediaControlsContainer = document.getElementById('media-controls-container');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const volumeSlider = document.getElementById('volume-slider');
+    const volumeIcon = document.getElementById('volume-icon');
+    const seekBackBtn = document.getElementById('seek-back-btn');
+    const seekFwdBtn = document.getElementById('seek-fwd-btn');
+
+    let linesData = {}, currentLineKey = null, currentStopIndex = 0, serviceStatus = 'online';
+    let videoNotAvailable = false;
+    
+    // Icone SVG per i pulsanti audio
+    const iconMicRed = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
+    const iconMicGreen = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
+
+
+    function getDefaultData() {
+        return {
+            "3": { "direction": "CORSA DEVIATA", "stops": [
+                { "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }, 
+                { "name": "PRIMULE", "subtitle": "", "audio": null }, 
+                { "name": "PERVINCHE", "subtitle": "", "audio": null }, 
+                { "name": "SANSOVINO", "subtitle": "", "audio": null }, 
+                { "name": "CINCINNATO", "subtitle": "MERCATO RIONALE", "audio": null }, 
+                { "name": "LOMBARDIA", "subtitle": "FERMATA PIU VICINA PER LA PISCINA LOMBARDIA", "audio": null }, 
+                { "name": "BORSI", "subtitle": "", "audio": null }, 
+                { "name": "LARGO TOSCANA", "subtitle": "", "audio": null }, 
+                { "name": "LARGO BORGARO", "subtitle": "", "audio": null }, 
+                { "name": "PIERO DELLA FRANCESCA", "subtitle": "FERMATA PIU VICINA PER IL MUSEO A COME AMBIENTE", "audio": null }, 
+                { "name": "OSPEDALE AMEDEO DI SAVOIA", "subtitle": "UNIVERSITÀ - DIPARTIMENTO DI INFORMATICA", "audio": null }, 
+                { "name": "TASSONI", "subtitle": "", "audio": null }, 
+                { "name": "AVELLINO", "subtitle": "", "audio": null }, 
+                { "name": "LIVORNO", "subtitle": "", "audio": null }, 
+                { "name": "INDUSTRIA", "subtitle": "", "audio": null }, 
+                { "name": "RONDÒ FORCA OVEST", "subtitle": "MARIA AUSILIATRICE", "audio": null }, 
+                { "name": "OSPEDALE COTTOLENGO", "subtitle": "ANAGRAFE CENTRALE", "audio": null }, 
+                { "name": "PORTA PALAZZO", "subtitle": "PIAZZA DELLA REPBLICA", "audio": null }, 
+                { "name": "PORTA PALAZZO EST", "subtitle": "PIAZZA DELLA REPBLICA", "audio": null }, 
+                { "name": "XI FEBBRAIO", "subtitle": "AUTOSTAZIONE DORA", "audio": null }, 
+                { "name": "GIARDINI REALI", "subtitle": "RONDÒ RIVELLA", "audio": null }, 
+                { "name": "ROSSINI", "subtitle": "MOLE ANTONELLIANA", "audio": null }, 
+                { "name": "CAMPUS EINAUDI", "subtitle": "", "audio": null }, 
+                { "name": "LARGO BERARDI", "subtitle": "", "audio": null }, 
+                { "name": "OSPEDALE GRADENIGO", "subtitle": "", "audio": null }, 
+                { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }
+            ]}
+        };
+    }
+
+    function loadData() { linesData = JSON.parse(localStorage.getItem('busSystem-linesData')) || getDefaultData(); saveData(); }
+    function saveData() { localStorage.setItem('busSystem-linesData', JSON.stringify(linesData)); sendFullStateUpdate(); }
+    function loadMessages() {
+        const messages = localStorage.getItem('busSystem-infoMessages');
+        infoMessagesInput.value = messages ? JSON.parse(messages).join('\\n') : ["Benvenuti a bordo del servizio Harzafi.", "Si prega di mantenere il corretto distanziamento."].join('\\n');
+        if (!messages) saveMessages(false);
+    }
+
+    function saveMessages(showFeedback = true) {
+        const messagesArray = infoMessagesInput.value.split('\\n').filter(msg => msg.trim() !== '');
+        localStorage.setItem('busSystem-infoMessages', JSON.stringify(messagesArray));
+        sendFullStateUpdate();
+        if(showFeedback) {
+            const originalText = saveMessagesBtn.textContent;
+            saveMessagesBtn.textContent = 'Salvato!'; saveMessagesBtn.classList.add('btn-success'); saveMessagesBtn.classList.remove('btn-primary');
+            setTimeout(() => { saveMessagesBtn.textContent = originalText; saveMessagesBtn.classList.remove('btn-success'); saveMessagesBtn.classList.add('btn-primary'); }, 2000);
+        }
+    }
+
+    function loadMediaStatus() {
+        const mediaSource = localStorage.getItem('busSystem-mediaSource');
+        const videoName = localStorage.getItem('busSystem-videoName');
+        const hasMedia = mediaSource === 'embed' || (mediaSource === 'server' && videoName);
+        
+        mediaControlsContainer.classList.toggle('disabled', !hasMedia);
+
+        if (mediaSource === 'embed') {
+            mediaUploadStatusText.textContent = `Media da Embed attivo.`;
+            removeMediaBtn.style.display = 'inline-block';
+        } else if (mediaSource === 'server' && videoName) {
+            mediaUploadStatusText.textContent = `Video locale: ${videoName}`;
+            removeMediaBtn.style.display = 'inline-block';
+        } else {
+            mediaUploadStatusText.textContent = 'Nessun media caricato.';
+            removeMediaBtn.style.display = 'none';
+        }
+    }
+
+    async function handleLocalVideoUpload(event) {
+        const file = event.target.files[0]; if (!file) return;
+        importVideoBtn.disabled = true; importVideoBtn.textContent = 'CARICAMENTO...';
         const formData = new FormData(); formData.append('video', file);
-        await fetchAuthenticated('/upload-video', {method:'POST', body:formData});
-        localStorage.setItem('busSystem-mediaSource', 'server');
-        localStorage.setItem('busSystem-videoName', file.name);
+        const response = await fetchAuthenticated('/upload-video', { method: 'POST', body: formData });
+        
+        // --- GESTIONE CARICAMENTO VIDEO ---
+        // 'response' potrebbe essere null se fetchAuthenticated ha gestito un errore 401
+        if (response) {
+            if (response.ok) {
+                localStorage.setItem('busSystem-mediaSource', 'server'); 
+                localStorage.setItem('busSystem-videoName', file.name);
+                localStorage.removeItem('busSystem-embedCode');
+                localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
+                loadMediaStatus(); 
+                sendFullStateUpdate();
+            } else {
+                // Errore 500 o altro errore dal server (es. disco pieno)
+                try {
+                    const errorData = await response.json();
+                    alert('Errore caricamento: ' + (errorData.error || 'Errore server sconosciuto'));
+                } catch(e) {
+                    alert('Errore grave durante il caricamento del video.');
+                }
+            }
+        }
+        // --- FINE GESTIONE ---
+        
+        importVideoBtn.disabled = false; importVideoBtn.textContent = 'Importa Video Locale';
+        videoImporter.value = ''; // Resetta l'input file per permettere di ricaricare lo stesso file
+    }
+    async function handleEmbedImport() {
+        const rawCode = embedCodeInput.value.trim();
+        if (!rawCode.includes('<iframe')) { alert('Codice <iframe> non valido.'); return; }
+        await fetchAuthenticated('/clear-video', { method: 'POST' });
+        const tempDiv = document.createElement('div'); tempDiv.innerHTML = rawCode;
+        const iframe = tempDiv.querySelector('iframe'); if (!iframe) { alert('Tag <iframe> non trovato.'); return; }
+        iframe.setAttribute('width', '100%'); iframe.setAttribute('height', '100%');
+        iframe.setAttribute('style', 'position:absolute; top:0; left:0; width:100%; height:100%; border:0;');
+        localStorage.setItem('busSystem-mediaSource', 'embed');
+        localStorage.setItem('busSystem-embedCode', iframe.outerHTML);
+        localStorage.removeItem('busSystem-videoName');
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
+        loadMediaStatus(); embedCodeInput.value = ''; sendFullStateUpdate();
+    }
+    async function removeMedia() {
+        if (!confirm('Rimuovere il media attuale?')) return;
+        await fetchAuthenticated('/clear-video', { method: 'POST' });
+        localStorage.removeItem('busSystem-mediaSource'); localStorage.removeItem('busSystem-videoName');
+        localStorage.removeItem('busSystem-embedCode');
+        localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
+        loadMediaStatus(); sendFullStateUpdate();
+    }
+
+    function saveServiceStatus() { localStorage.setItem('busSystem-serviceStatus', serviceStatus); sendFullStateUpdate(); }
+    function renderServiceStatus() {
+        const isOnline = serviceStatus === 'online';
+        serviceStatusText.textContent = isOnline ? 'In Servizio' : 'Fuori Servizio';
+        serviceStatusText.style.color = isOnline ? 'var(--success)' : 'var(--danger)';
+        serviceStatusToggle.checked = isOnline;
+    }
+
+    function saveVideoNotAvailableStatus() {
+        localStorage.setItem('busSystem-videoNotAvailable', videoNotAvailable);
         sendFullStateUpdate();
+    }
+    function renderVideoNotAvailableStatus() {
+        const isNotAvailable = videoNotAvailable === true;
+        videoNotAvailableStatusText.textContent = isNotAvailable ? 'Attivato' : 'Disattivato';
+        videoNotAvailableStatusText.style.color = isNotAvailable ? 'var(--danger)' : 'var(--text-primary)';
+        videoNotAvailableToggle.checked = isNotAvailable;
+    }
+
+    function renderAll() { renderNavigationPanel(); renderManagementPanel(); renderStatusDisplay(); }
+    function renderNavigationPanel() {
+        lineSelector.innerHTML = '';
+        const keys = Object.keys(linesData).sort();
+        if (keys.length > 0) {
+            keys.forEach(key => {
+                const option = document.createElement('option');
+                option.value = key; option.textContent = `${key} → ${linesData[key].direction}`;
+                lineSelector.appendChild(option);
+            });
+            if (linesData[currentLineKey]) lineSelector.value = currentLineKey;
+        } else {
+            lineSelector.innerHTML = '<option>Nessuna linea disponibile</option>';
+        }
+    }
+    function renderManagementPanel() {
+        lineManagementList.innerHTML = '';
+        Object.keys(linesData).sort().forEach(key => {
+            const item = document.createElement('li');
+            item.className = 'line-item';
+            item.innerHTML = `<span>${key} → ${linesData[key].direction}</span><div class="line-actions"><button class="btn-secondary edit-btn" data-id="${key}">Modifica</button><button class="btn-danger delete-btn" data-id="${key}">Elimina</button></div>`;
+            lineManagementList.appendChild(item);
+        });
+    }
+    function renderStatusDisplay() {
+        const line = linesData[currentLineKey];
+        const hasLine = line && line.stops && line.stops.length > 0;
+        nextBtn.disabled = !hasLine || currentStopIndex >= line.stops.length - 1;
+        prevBtn.disabled = !hasLine || currentStopIndex <= 0;
+        announceBtn.disabled = !hasLine;
+        if (!hasLine) {
+            statusLineName.textContent = 'N/D'; statusLineDirection.textContent = 'N/D';
+            statusStopName.textContent = 'Nessuna Fermata'; statusStopSubtitle.textContent = 'Selezionare una linea'; statusProgress.textContent = '--/--';
+            return;
+        }
+        const stop = line.stops[currentStopIndex]; if (!stop) return;
+        statusLineName.textContent = currentLineKey; statusLineDirection.textContent = line.direction;
+        statusStopName.textContent = stop.name; statusStopSubtitle.textContent = stop.subtitle || ' ';
+        statusProgress.textContent = `${currentStopIndex + 1}/${line.stops.length}`;
+    }
+
+    function updateAndRenderStatus() {
+        if (!linesData[currentLineKey] || Object.keys(linesData).length === 0) {
+            currentLineKey = Object.keys(linesData).sort()[0] || null;
+            currentStopIndex = 0;
+        } else {
+            const stopsCount = linesData[currentLineKey].stops.length;
+            if (currentStopIndex >= stopsCount) currentStopIndex = Math.max(0, stopsCount - 1);
+        }
+        localStorage.setItem('busSystem-currentLine', currentLineKey);
+        localStorage.setItem('busSystem-currentStopIndex', currentStopIndex);
+        if (linesData[currentLineKey]) lineSelector.value = currentLineKey;
+        renderStatusDisplay();
+        sendFullStateUpdate();
+    }
+    
+    function setupMediaControls() {
+        const initialVolume = localStorage.getItem('busSystem-volumeLevel') || '1.0';
+        const initialPlaybackState = localStorage.getItem('busSystem-playbackState') || 'playing';
+        volumeSlider.value = initialVolume;
+        updateVolumeIcon(initialVolume);
+        playPauseBtn.innerHTML = initialPlaybackState === 'playing' ? '❚❚' : '▶';
+
+        playPauseBtn.addEventListener('click', () => {
+            let currentState = localStorage.getItem('busSystem-playbackState') || 'playing';
+            const newState = currentState === 'playing' ? 'paused' : 'playing';
+            localStorage.setItem('busSystem-playbackState', newState);
+            playPauseBtn.innerHTML = newState === 'playing' ? '❚❚' : '▶';
+            sendFullStateUpdate();
+        });
+
+        volumeSlider.addEventListener('input', () => {
+            const newVolume = volumeSlider.value;
+            localStorage.setItem('busSystem-volumeLevel', newVolume);
+            updateVolumeIcon(newVolume);
+            sendFullStateUpdate();
+        });
+
+        seekBackBtn.addEventListener('click', () => {
+            localStorage.setItem('busSystem-seekAction', JSON.stringify({ value: -5, timestamp: Date.now() }));
+            sendFullStateUpdate();
+        });
+
+        seekFwdBtn.addEventListener('click', () => {
+            localStorage.setItem('busSystem-seekAction', JSON.stringify({ value: 5, timestamp: Date.now() }));
+            sendFullStateUpdate();
+        });
+    }
+
+    function updateVolumeIcon(volume) {
+        const vol = parseFloat(volume);
+        if (vol === 0) { volumeIcon.textContent = '🔇'; }
+        else if (vol < 0.5) { volumeIcon.textContent = '🔈'; }
+        else { volumeIcon.textContent = '🔊'; }
+    }
+    
+    function setupPreviewControls() {
+        const previewIframe = document.getElementById('viewer-iframe-preview');
+        const togglePlaybackBtn = document.getElementById('toggle-preview-playback-btn');
+        let videoInIframe = null;
+
+        const updateButtonState = () => {
+            if (videoInIframe) {
+                if (videoInIframe.paused) {
+                    togglePlaybackBtn.textContent = '▶ Riproduci in anteprima';
+                } else {
+                    togglePlaybackBtn.textContent = '❚❚ Pausa in anteprima';
+                }
+            }
+        };
+        
+        previewIframe.addEventListener('load', () => {
+            try {
+                const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
+                videoInIframe = iframeDoc.getElementById('ad-video');
+                
+                // === MODIFICA CHIAVE: MUTA TUTTI GLI AUDIO NELL'ANTEPRIMA ===
+                const announcementAudio = iframeDoc.getElementById('announcement-sound');
+                if (announcementAudio) announcementAudio.muted = true;
+                const bookedAudio = iframeDoc.getElementById('booked-sound-viewer');
+                if (bookedAudio) bookedAudio.muted = true;
+                const stopAudio = iframeDoc.getElementById('stop-announcement-sound');
+                if (stopAudio) stopAudio.muted = true;
+                
+                if (videoInIframe) {
+                    videoInIframe.muted = true; // Rende il video silenzioso nella preview
+                    videoInIframe.pause(); // Lo mette in pausa di default
+                    
+                    // Se il video di sfondo esiste (solo per video locali)
+                    const videoBgEl = iframeDoc.getElementById('ad-video-bg');
+                    if (videoBgEl) videoBgEl.muted = true;
+
+                    videoInIframe.addEventListener('play', updateButtonState);
+                    videoInIframe.addEventListener('pause', updateButtonState);
+
+                    togglePlaybackBtn.disabled = false;
+                    updateButtonState();
+                } else {
+                    if (iframeDoc.querySelector('.placeholder-image')) {
+                        togglePlaybackBtn.disabled = true;
+                        togglePlaybackBtn.textContent = 'Nessun video da riprodurre';
+                    }
+                }
+
+            } catch (e) {
+                console.warn("Contenuto dell'iframe non accessibile. I controlli di riproduzione sono disabilitati.");
+                togglePlaybackBtn.disabled = true;
+                togglePlaybackBtn.textContent = 'Riproduzione non controllabile';
+            }
+        });
+
+        togglePlaybackBtn.addEventListener('click', () => {
+            if (videoInIframe && !togglePlaybackBtn.disabled) {
+                if (videoInIframe.paused) {
+                    videoInIframe.play();
+                } else {
+                    videoInIframe.pause();
+                }
+            }
+        });
+    }
+
+    function initialize() {
+        loadMediaStatus();
+        setupMediaControls();
+        setupPreviewControls();
+        loadData();
+        loadMessages();
+        
+        serviceStatus = localStorage.getItem('busSystem-serviceStatus') || 'online';
+        saveServiceStatus();
+        renderServiceStatus();
+        
+        videoNotAvailable = localStorage.getItem('busSystem-videoNotAvailable') === 'true';
+        saveVideoNotAvailableStatus();
+        renderVideoNotAvailableStatus();
+        
+        currentLineKey = localStorage.getItem('busSystem-currentLine');
+        currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex'), 10) || 0;
+        
+        renderAll();
+        updateAndRenderStatus();
+    }
+    
+    lineSelector.addEventListener('change', (e) => { currentLineKey = e.target.value; currentStopIndex = 0; updateAndRenderStatus(); });
+    resetDataBtn.addEventListener('click', () => { if (confirm('Sei sicuro? Questa azione cancellerà tutti i dati e richiederà un nuovo login.')) { localStorage.clear(); window.location.href="{{ url_for('logout') }}"; } });
+    nextBtn.addEventListener('click', () => { const currentLine = linesData[currentLineKey]; if (currentLine && currentStopIndex < currentLine.stops.length - 1) { currentStopIndex++; updateAndRenderStatus(); } });
+    prevBtn.addEventListener('click', () => { if (currentStopIndex > 0) { currentStopIndex--; updateAndRenderStatus(); } });
+    announceBtn.addEventListener('click', () => { 
+        if (currentLineKey && linesData[currentLineKey]) {
+            localStorage.setItem('busSystem-playAnnouncement', JSON.stringify({ timestamp: Date.now() })); 
+            sendFullStateUpdate();
+        } else { alert('Nessuna linea attiva selezionata.'); } 
+    });
+    serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
+    
+    videoNotAvailableToggle.addEventListener('change', () => {
+        videoNotAvailable = videoNotAvailableToggle.checked;
+        saveVideoNotAvailableStatus();
+        renderVideoNotAvailableStatus();
     });
 
-    // Gestione Messaggi
-    document.getElementById('save-messages-btn').addEventListener('click', () => {
-        const msgs = document.getElementById('info-messages-input').value.split('\\n').filter(m=>m.trim()!=='');
-        localStorage.setItem('busSystem-infoMessages', JSON.stringify(msgs));
+    bookedBtn.addEventListener('click', () => {
+        localStorage.setItem('busSystem-stopRequested', JSON.stringify({ timestamp: Date.now() }));
         sendFullStateUpdate();
+        
+        bookedBtn.textContent = 'PRENOTATA!';
+        bookedBtn.classList.add('btn-danger');
+        bookedBtn.classList.remove('btn-primary');
+        bookedBtn.disabled = true;
+        
+        setTimeout(() => {
+            bookedBtn.textContent = 'PRENOTA FERMATA';
+            bookedBtn.classList.remove('btn-danger');
+            bookedBtn.classList.add('btn-primary');
+            bookedBtn.disabled = false;
+        }, 2500); 
     });
 
-    // Socket listeners
-    socket.on('connect', () => sendFullStateUpdate());
+    importVideoBtn.addEventListener('click', () => videoImporter.click());
+    videoImporter.addEventListener('change', handleLocalVideoUpload);
+    importEmbedBtn.addEventListener('click', handleEmbedImport);
+    removeMediaBtn.addEventListener('click', removeMedia);
+    addNewLineBtn.addEventListener('click', () => { 
+        document.getElementById('edit-line-id').value = ''; 
+        document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; 
+        lineEditorForm.reset(); 
+        stopsListContainer.innerHTML = ''; 
+        addStopToModal(); 
+        modal.showModal(); 
+    });
+    
+    lineManagementList.addEventListener('click', (e) => {
+        const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
+        if (target.classList.contains('edit-btn')) {
+            editLineId.value = lineId; document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; const line = linesData[lineId];
+            lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; 
+            (line.stops || []).forEach(s => addStopToModal(s)); 
+            modal.showModal();
+        } if (target.classList.contains('delete-btn')) { 
+            if (confirm(`Eliminare la linea "${lineId}"?`)) { 
+                delete linesData[lineId]; 
+                saveData(); 
+                renderAll(); 
+            } 
+        }
+    });
+    
+    addStopBtn.addEventListener('click', () => addStopToModal());
+    
+    // === NUOVO GESTORE EVENTI PER IL MODAL FERMATE (Upload e Rimozione) ===
+    stopsListContainer.addEventListener('click', (e) => {
+        const audioBtn = e.target.closest('.audio-upload-btn');
+        const removeBtn = e.target.closest('.remove-stop-btn');
+        
+        if (audioBtn) {
+            // Cliccato bottone audio: triggera il file input nascosto
+            const stopItem = audioBtn.closest('.stop-item');
+            stopItem.querySelector('.stop-audio-input').click();
+        }
+        
+        if (removeBtn) {
+            // Cliccato bottone rimuovi
+            if (stopsListContainer.children.length > 1) {
+                removeBtn.closest('.stop-item').remove();
+            } else {
+                alert('Ogni linea deve avere almeno una fermata.');
+            }
+        }
+    });
+
+    // === NUOVO GESTORE EVENTI PER IL CARICAMENTO FILE AUDIO ===
+    stopsListContainer.addEventListener('change', (e) => {
+        if (e.target.classList.contains('stop-audio-input')) {
+            const file = e.target.files[0];
+            const stopItem = e.target.closest('.stop-item');
+            const audioBtn = stopItem.querySelector('.audio-upload-btn');
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const base64Audio = event.target.result;
+                    stopItem.dataset.audioData = base64Audio; // Salva Base64
+                    audioBtn.classList.remove('status-red');
+                    audioBtn.classList.add('status-green');
+                    audioBtn.innerHTML = iconMicGreen;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+    });
+    
+    // === NUOVA FUNZIONE per aggiungere fermate (con audio) ===
+    function addStopToModal(stop = { name: '', subtitle: '', audio: null }) {
+        const stopItem = document.createElement('div');
+        stopItem.className = 'stop-item';
+        
+        const audioData = stop.audio || null;
+        const audioStatus = audioData ? 'green' : 'red';
+        
+        stopItem.innerHTML = `
+            <input type="file" class="stop-audio-input" accept="audio/mpeg,audio/mp3" style="display: none;">
+            <button type="button" class="audio-upload-btn status-${audioStatus}" title="Carica/Modifica audio fermata">
+                ${audioStatus === 'green' ? iconMicGreen : iconMicRed}
+            </button>
+            <div class="stop-inputs">
+                <input type="text" placeholder="Nome fermata" class="stop-name-input" value="${stop.name || ''}" required>
+                <input type="text" placeholder="Sottotitolo (opz.)" class="stop-subtitle-input" value="${stop.subtitle || ''}">
+            </div>
+            <button type="button" class="btn-danger remove-stop-btn" title="Rimuovi fermata">-</button>
+        `;
+        
+        // Salva il dato audio (Base64) sul div principale
+        if (audioData) {
+            stopItem.dataset.audioData = audioData;
+        }
+        
+        stopsListContainer.appendChild(stopItem);
+    }
+    
+    // === MODIFICATO GESTORE SUBMIT FORM (per salvare audio) ===
+    lineEditorForm.addEventListener('submit', (e) => {
+        e.preventDefault(); 
+        const originalId = editLineId.value; 
+        const newId = lineNameInput.value.trim().toUpperCase(); 
+        const direction = lineDirectionInput.value.trim();
+        
+        if (!newId || !direction) { 
+            alert('Nome linea e destinazione sono obbligatori.'); 
+            return; 
+        }
+        
+        const stops = Array.from(stopsListContainer.querySelectorAll('.stop-item')).map(item => {
+            const name = item.querySelector('.stop-name-input').value.trim().toUpperCase();
+            const subtitle = item.querySelector('.stop-subtitle-input').value.trim().toUpperCase();
+            const audio = item.dataset.audioData || null; // Recupera Base64
+            return { name, subtitle, audio }; // Nuovo formato
+        }).filter(s => s.name);
+        
+        if (stops.length === 0) { 
+            alert('Aggiungere almeno una fermata con un nome.'); 
+            return; 
+        }
+        
+        if (originalId && originalId !== newId) {
+            delete linesData[originalId]; 
+        }
+        linesData[newId] = { direction, stops }; 
+        saveData();
+        
+        if (currentLineKey === originalId) { 
+            currentLineKey = newId; 
+            localStorage.setItem('busSystem-currentLine', newId); 
+        }
+        
+        renderAll(); 
+        updateAndRenderStatus(); 
+        modal.close();
+    });
+    
+    saveMessagesBtn.addEventListener('click', () => saveMessages(true));
+    const cancelBtn = document.getElementById('cancel-btn');
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.close(); });
+    cancelBtn.addEventListener('click', () => modal.close());
+
+    initialize();
 });
 </script>
 </body>
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO CON BARRA TICKER GLASSMORPHISM) ---
+# --- VISUALIZZATORE (MODIFICATO con Modale di Errore) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -591,7 +1215,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
             display: flex;
             overflow: hidden;
             font-size: 1.2em;
-            position: relative;
         }
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -608,18 +1231,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         #loader.hidden { opacity: 0; pointer-events: none; }
         
-        .main-content-wrapper { 
-            flex: 3; display: flex; align-items: center; justify-content: center; 
-            height: 100%; padding: 0 40px; padding-bottom: 120px; /* Spazio per la ticker bar */ 
-        }
-        .video-wrapper { 
-            flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; 
-            padding: 40px; padding-bottom: 160px; /* Spazio extra per video centrato ma sopra la bar */
-            box-sizing: border-box; 
-        }
+        .main-content-wrapper { flex: 3; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 40px; }
+        .video-wrapper { flex: 2; height: 100%; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box; }
         .container { display: flex; align-items: center; width: 100%; max-width: 1400px; opacity: 0; transition: opacity 0.8s ease; }
         .container.visible { opacity: 1; }
-        
         .line-graphic {
             flex-shrink: 0; width: 120px; height: 500px; display: flex;
             flex-direction: column; align-items: center; position: relative;
@@ -656,11 +1271,16 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
         #stop-name.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
         #stop-subtitle { font-size: 34px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
+        
+        .logo {
+            position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
+            filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
+        }
+        .logo.visible { opacity: 0.9; }
 
         @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-        
         #service-offline-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; display: flex; align-items: center; justify-content: center; text-align: center; color: white; background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0; pointer-events: none; }
         #service-offline-overlay.visible { pointer-events: auto; animation: fadeInBlur 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         #service-offline-overlay.hiding { animation: fadeOutBlur 0.6s ease-out forwards; }
@@ -671,6 +1291,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         
         #video-player-container {
             width: 100%; max-width: 100%; background-color: transparent;
+            /* === Bordi più arrotondati (come richiesto) === */
             border-radius: 40px; 
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
@@ -678,15 +1299,29 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         
         #video-player-container::before {
-            content: ''; position: absolute; top: -30px; left: -30px; right: -30px; bottom: -30px;
+            content: '';
+            position: absolute;
+            top: -30px; left: -30px; right: -30px; bottom: -30px;
             background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-            filter: blur(25px) brightness(0.7); z-index: 1;
+            filter: blur(25px) brightness(0.7);
+            z-index: 1;
         }
+        /* === Bordi più arrotondati (come richiesto) === */
         #video-player-container iframe { border-radius: 40px; z-index: 2; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         
-        .placeholder-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; border-radius: 40px; }
-        .video-background-blur { position: absolute; top: 0; left: 0; width: 100%; height: 100%; filter: blur(30px) brightness(0.7); transform: scale(1.15); opacity: 0.8; overflow: hidden; z-index: 3; }
+        .placeholder-image {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; z-index: 2; 
+            /* === Bordi più arrotondati (come richiesto) === */
+            border-radius: 40px;
+        }
+        
+        .video-background-blur {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            filter: blur(30px) brightness(0.7); transform: scale(1.15);
+            opacity: 0.8; overflow: hidden; z-index: 3;
+        }
         #ad-video-bg, #ad-video { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
         #ad-video-bg { object-fit: cover; }
         #ad-video { object-fit: contain; z-index: 4; }
@@ -696,101 +1331,78 @@ VISUALIZZATORE_COMPLETO_HTML = """
         @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
 
+        /* === NUOVI STILI PER MODALE ERRORE VIDEO === */
         #video-error-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            z-index: 2000; display: flex; align-items: center; justify-content: center;
-            opacity: 0; pointer-events: none; transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        #video-error-overlay.visible { opacity: 1; pointer-events: auto; }
+        #video-error-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
         .error-modal-content {
-            background: #1D1D1F; color: #F5F5F7; padding: 30px 40px; border-radius: 20px;
-            border: 1px solid #3A3A3C; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-            max-width: 500px; width: 90%; text-align: center; transform: scale(0.95) translateY(20px);
-            opacity: 0; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            background: #1D1D1F; /* Stesso colore del pannello di controllo */
+            color: #F5F5F7;
+            padding: 30px 40px;
+            border-radius: 20px;
+            border: 1px solid #3A3A3C;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            transform: scale(0.95) translateY(20px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        #video-error-overlay.visible .error-modal-content { transform: scale(1) translateY(0); opacity: 1; }
+        #video-error-overlay.visible .error-modal-content {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+        }
         .error-modal-content .error-icon {
-            width: 60px; height: 60px; background-color: rgba(255, 69, 58, 0.15); color: #FF453A;
-            border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto;
+            width: 60px; height: 60px;
+            background-color: rgba(255, 69, 58, 0.15);
+            color: #FF453A; /* Colore Danger */
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 20px auto;
         }
         .error-modal-content .error-icon svg { width: 32px; height: 32px; }
-        .error-modal-content h2 { font-size: 24px; font-weight: 700; margin: 0 0 10px 0; }
-        .error-modal-content p { font-size: 16px; color: #86868B; margin: 0 0 25px 0; }
+        .error-modal-content h2 {
+            font-size: 24px; font-weight: 700; margin: 0 0 10px 0;
+        }
+        .error-modal-content p {
+            font-size: 16px; color: #86868B; margin: 0 0 25px 0;
+        }
         .error-modal-content button {
-            width: 100%; background: #0A84FF; color: white; border: none; padding: 12px; font-size: 16px;
-            font-weight: 600; border-radius: 12px; cursor: pointer; transition: filter 0.2s;
+            width: 100%;
+            background: #0A84FF; /* Colore Blue */
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: filter 0.2s;
         }
-        .error-modal-content button:hover { filter: brightness(1.1); }
-
-        /* ==========================================================================
-           NUOVA BARRA INFORMATIVA (TICKER) - GLASSMORPHISM & BLUR EFFECT
-           ========================================================================== */
-        .info-ticker-bar {
-            position: fixed; bottom: 30px; left: 30px; right: 30px; height: 90px;
-            background: rgba(20, 20, 25, 0.65); /* Base scura semi-trasparente */
-            border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-            display: flex; align-items: stretch; overflow: hidden;
-            z-index: 900; /* Sotto l'overlay service-offline ma sopra il video */
+        .error-modal-content button:hover {
+            filter: brightness(1.1);
         }
-
-        /* --- TESTO SCORREVOLE (Livello Inferiore) --- */
-        .ticker-scroll-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; align-items: center; z-index: 1;
-        }
-        .ticker-text-wrapper {
-            white-space: nowrap; will-change: transform;
-            animation: ticker-scroll-anim 30s linear infinite;
-            padding-left: 100%; /* Parte da fuori schermo a destra */
-            display: flex; align-items: center;
-        }
-        .ticker-text-item {
-            font-size: 28px; font-weight: 600; text-transform: uppercase;
-            color: #ffffff; margin-right: 100px; letter-spacing: 1px;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-        }
-        @keyframes ticker-scroll-anim {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-100%); }
-        }
-
-        /* --- ELEMENTI LATERALI (Livello Superiore con Blur) --- */
-        .ticker-side-panel {
-            position: relative; z-index: 5; display: flex; align-items: center;
-            padding: 0 30px; background: rgba(20, 20, 25, 0.4); /* Colore di fondo per leggibilità */
-            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); /* EFFETTO BLUR SUL TESTO SOTTO */
-            height: 100%; box-shadow: 0 0 20px rgba(0,0,0,0.2);
-        }
-        .ticker-left {
-            justify-content: flex-start; border-right: 1px solid rgba(255,255,255,0.1);
-            min-width: 220px;
-        }
-        .ticker-right {
-            justify-content: flex-end; border-left: 1px solid rgba(255,255,255,0.1);
-            margin-left: auto; /* Spinge a destra */
-            min-width: 180px;
-        }
-        /* Orologio e Data */
-        .clock-container {
-            display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-        }
-        .clock-time {
-            font-size: 36px; font-weight: 900; line-height: 1; letter-spacing: -1px; color: #fff;
-        }
-        .clock-date {
-            font-size: 16px; font-weight: 500; color: rgba(255,255,255,0.7);
-            margin-top: 4px; text-transform: uppercase;
-        }
-        /* Logo nella Barra */
-        .ticker-logo-img {
-            height: 60px; width: auto; filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));
-        }
+        /* === FINE STILI MODALE === */
     </style>
 </head>
 <body>
-    <audio id="announcement-sound" src="{{ url_for('announcement_audio') }}" preload="auto"></audio>
+    <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
     <audio id="stop-announcement-sound" preload="auto" style="display:none;"></audio>
     <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
 
@@ -798,7 +1410,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi in caricamento">
         <p>CONNESSIONE AL SERVER...</p>
     </div>
-    
     <div class="main-content-wrapper">
         <div class="container">
             <div class="line-graphic">
@@ -814,30 +1425,11 @@ VISUALIZZATORE_COMPLETO_HTML = """
             </div>
         </div>
     </div>
-    
     <div class="video-wrapper">
         <div id="video-player-container" class="aspect-ratio-16-9"></div>
     </div>
     
-    <div class="info-ticker-bar">
-        <div class="ticker-side-panel ticker-left">
-            <div class="clock-container">
-                <div id="clock-time" class="clock-time">--:--</div>
-                <div id="clock-date" class="clock-date">--/--/--</div>
-            </div>
-        </div>
-
-        <div class="ticker-scroll-layer">
-            <div class="ticker-text-wrapper" id="scrolling-messages-container">
-                <span class="ticker-text-item">BENVENUTI A BORDO - SISTEMA HARZAFI ONLINE</span>
-            </div>
-        </div>
-
-        <div class="ticker-side-panel ticker-right">
-            <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="ticker-logo-img">
-        </div>
-    </div>
-
+    <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
     <div id="service-offline-overlay">
         <div class="overlay-content">
             <h2>NESSUN SERVIZIO</h2>
@@ -855,20 +1447,16 @@ VISUALIZZATORE_COMPLETO_HTML = """
             <button id="close-error-modal-btn">Chiudi</button>
         </div>
     </div>
-
-<script>
+    <script>
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
     const announcementSound = document.getElementById('announcement-sound');
-    const stopAnnouncementSound = document.getElementById('stop-announcement-sound'); 
+    const stopAnnouncementSound = document.getElementById('stop-announcement-sound'); // Nuovo selettore
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
+    
+    // --- NUOVO SELETTORE PER MODALE ERRORE ---
     const videoErrorOverlay = document.getElementById('video-error-overlay');
-
-    // Elementi Ticker
-    const clockTimeEl = document.getElementById('clock-time');
-    const clockDateEl = document.getElementById('clock-date');
-    const scrollingMessagesContainer = document.getElementById('scrolling-messages-container');
 
     const IMG_DEFAULT = 'https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg';
     const IMG_NOT_AVAILABLE = 'https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg';
@@ -878,52 +1466,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMediaState = null;
     let mediaTimeout = null;
 
-    // --- GESTIONE OROLOGIO (Timezone Roma) ---
-    function updateClock() {
-        const now = new Date();
-        const optionsTime = { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' };
-        const optionsDate = { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'Europe/Rome' };
-        
-        const timeString = now.toLocaleTimeString('it-IT', optionsTime);
-        const dateString = now.toLocaleDateString('it-IT', optionsDate);
-        
-        clockTimeEl.textContent = timeString;
-        clockDateEl.textContent = dateString;
-    }
-    setInterval(updateClock, 1000);
-    updateClock(); // Call immediately
-
-    // --- GESTIONE MESSAGGI SCORREVOLI ---
-    function updateScrollingMessages(messages) {
-        if (!messages || messages.length === 0) {
-            messages = ["SISTEMA INFORMATIVO DI BORDO HARZAFI"];
-        }
-
-        const currentText = scrollingMessagesContainer.innerText;
-        const newTextFull = messages.join("  *** ");
-        
-        // Ricostruiamo il contenuto per reset o cambio messaggi
-        scrollingMessagesContainer.innerHTML = '';
-        const separator = '<span style="display:inline-block; width: 80px; text-align:center; color: #A244A7;">●</span>';
-        
-        messages.forEach(msg => {
-            const span = document.createElement('span');
-            span.className = 'ticker-text-item';
-            span.innerHTML = msg + separator;
-            scrollingMessagesContainer.appendChild(span);
-        });
-        
-        // Duplichiamo i messaggi per riempire la barra
-        if (messages.length < 3) {
-             messages.forEach(msg => {
-                const span = document.createElement('span');
-                span.className = 'ticker-text-item';
-                span.innerHTML = msg + separator;
-                scrollingMessagesContainer.appendChild(span);
-            });
-        }
-    }
-
+    // --- NUOVO LISTENER PER CHIUDERE IL MODALE ---
     if (videoErrorOverlay) {
         document.getElementById('close-error-modal-btn').addEventListener('click', () => {
             videoErrorOverlay.classList.remove('visible');
@@ -934,7 +1477,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const videoEl = document.getElementById('ad-video');
         const videoBgEl = document.getElementById('ad-video-bg');
         
+        // Se non c'è un elemento video (es. è un iframe o un'immagine placeholder), non fare nulla
         if (!videoEl && !videoPlayerContainer.querySelector('iframe')) return;
+        
+        // Se è un iframe embed, non possiamo controllare direttamente volume/riproduzione
         if (videoPlayerContainer.querySelector('iframe')) return;
 
         const newVolume = parseFloat(state.volumeLevel);
@@ -960,61 +1506,104 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showMediaContent(html, stateToApply) {
         if (mediaTimeout) clearTimeout(mediaTimeout);
+        
         videoPlayerContainer.classList.remove('box-enter-animation');
         videoPlayerContainer.classList.add('box-exit-animation');
+        
         setTimeout(() => {
             videoPlayerContainer.innerHTML = html;
             videoPlayerContainer.classList.remove('box-exit-animation');
             videoPlayerContainer.classList.add('box-enter-animation');
+            
             const videoEl = document.getElementById('ad-video');
             if (videoEl) {
+                // Aggiungiamo un event listener per la riproduzione in loop
                 videoEl.addEventListener('ended', () => {
-                    videoEl.currentTime = 0; videoEl.play().catch(e => console.error("Errore riavvio loop:", e));
+                    videoEl.currentTime = 0;
+                    videoEl.play().catch(e => console.error("Errore riavvio loop:", e));
                 });
+                
                 videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
-                videoEl.onerror = () => { loadMedia('error', stateToApply); };
+                
+                // --- GESTIONE ERRORE MODIFICATA ---
+                videoEl.onerror = () => {
+                    console.error("Errore caricamento video locale.");
+                    loadMedia('error', stateToApply); // Chiama il nuovo stato 'error'
+                };
             }
         }, 600);
     }
 
     function loadMedia(targetState, state) {
-        if (currentMediaState === targetState && targetState !== 'loading') return;
+        if (currentMediaState === targetState && targetState !== 'loading') {
+            return;
+        }
         currentMediaState = targetState;
         let contentHtml = '';
+
         switch (targetState) {
             case 'not_available':
                 contentHtml = `<img src="${IMG_NOT_AVAILABLE}" class="placeholder-image" alt="Contenuto non disponibile">`;
-                showMediaContent(contentHtml, state); break;
+                showMediaContent(contentHtml, state);
+                break;
+            
             case 'default':
                 contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
-                showMediaContent(contentHtml, state); break;
+                showMediaContent(contentHtml, state);
+                break;
+
             case 'loading':
                 contentHtml = `<img src="${IMG_LOADING}" class="placeholder-image" alt="Caricamento in corso...">`;
                 showMediaContent(contentHtml, state);
+                
                 mediaTimeout = setTimeout(() => {
                     if (currentMediaState === 'loading') {
                         const nextState = state.mediaSource === 'server' ? 'server' : 'embed';
                         loadMedia(nextState, state);
                     }
-                }, 1500); break;
+                }, 1500);
+                break;
+                
             case 'server':
+                // La query string previene la cache del browser dopo un nuovo upload
                 const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
                 contentHtml = `
-                    <div class="video-background-blur"><video id="ad-video-bg" loop playsinline muted src="${videoUrl}"></video></div>
+                    <div class="video-background-blur">
+                        <video id="ad-video-bg" loop playsinline muted src="${videoUrl}"></video>
+                    </div>
                     <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
-                showMediaContent(contentHtml, state); break;
+                showMediaContent(contentHtml, state);
+                break;
+                
             case 'embed':
-                contentHtml = state.embedCode; showMediaContent(contentHtml, state); break;
+                contentHtml = state.embedCode;
+                showMediaContent(contentHtml, state);
+                break;
+                
+            // --- NUOVA GESTIONE 'error' ---
             case 'error':
+                console.log("Stato errore: mostro modale di errore.");
+                // Invece di mostrare l'immagine 404 per 10s,
+                // mostriamo l'immagine DI DEFAULT e apriamo il modale.
+                
+                // 1. Mostra il placeholder di default
                 contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
                 showMediaContent(contentHtml, state);
-                if (videoErrorOverlay) videoErrorOverlay.classList.add('visible');
-                if (mediaTimeout) clearTimeout(mediaTimeout); break;
+                
+                // 2. Apri il modale di errore
+                if (videoErrorOverlay) {
+                    videoErrorOverlay.classList.add('visible');
+                }
+                
+                // Rimuoviamo il vecchio timeout di 10 secondi
+                if (mediaTimeout) clearTimeout(mediaTimeout);
+                break;
         }
     }
     
     const loaderEl = document.getElementById('loader');
     const containerEl = document.querySelector('.container');
+    const logoEl = document.querySelector('.logo');
     const lineIdEl = document.getElementById('line-id');
     const directionNameEl = document.getElementById('direction-name');
     const stopNameEl = document.getElementById('stop-name');
@@ -1022,13 +1611,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopIndicatorEl = document.getElementById('stop-indicator');
     const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
+    // Funzione per audio LINEA (manuale)
     function playAnnouncement() {
         const videoEl = document.getElementById('ad-video');
         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
-        if (videoEl && !videoEl.muted) videoEl.volume = Math.min(originalVolume, 0.15);
+        
+        if (videoEl && !videoEl.muted) {
+            videoEl.volume = Math.min(originalVolume, 0.15);
+        }
+        
         announcementSound.currentTime = 0;
         announcementSound.play().catch(e => console.error("Errore riproduzione annuncio:", e));
-        announcementSound.onended = () => { if (videoEl) videoEl.volume = originalVolume; };
+        
+        announcementSound.onended = () => {
+            if (videoEl) {
+                videoEl.volume = originalVolume;
+            }
+        };
     }
 
     function adjustFontSize(element) {
@@ -1042,27 +1641,39 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkServiceStatus(state) {
         const isOffline = state.serviceStatus === 'offline';
         const isVisible = serviceOfflineOverlay.classList.contains('visible');
+
         if (isOffline && !isVisible) {
-            serviceOfflineOverlay.classList.remove('hiding'); serviceOfflineOverlay.classList.add('visible');
+            serviceOfflineOverlay.classList.remove('hiding');
+            serviceOfflineOverlay.classList.add('visible');
         } else if (!isOffline && isVisible) {
             serviceOfflineOverlay.classList.add('hiding');
             serviceOfflineOverlay.addEventListener('animationend', () => {
-                if (serviceOfflineOverlay.classList.contains('hiding')) serviceOfflineOverlay.classList.remove('visible', 'hiding');
+                if (serviceOfflineOverlay.classList.contains('hiding')) {
+                   serviceOfflineOverlay.classList.remove('visible', 'hiding');
+                }
             }, { once: true });
-        } else if (isOffline && isVisible) { serviceOfflineOverlay.classList.remove('hiding'); }
+        } else if (isOffline && isVisible) {
+             serviceOfflineOverlay.classList.remove('hiding');
+        }
         return !isOffline;
     }
     
+    /**
+     * =============================================
+     * FUNZIONE updateDisplay (CON LOGICA AUDIO STOP)
+     * =============================================
+     */
     function updateDisplay(state) {
-        if (!checkServiceStatus(state) || !state.linesData) return;
+        if (!checkServiceStatus(state) || !state.linesData) {
+            return;
+        }
+
         const isInitialLoad = !lastKnownState.currentLineKey && state.currentLineKey;
         
-        loaderEl.classList.add('hidden'); containerEl.classList.add('visible');
+        loaderEl.classList.add('hidden');
+        containerEl.classList.add('visible');
+        logoEl.classList.add('visible');
         
-        const oldMessages = JSON.stringify(lastKnownState.infoMessages);
-        const newMessages = JSON.stringify(state.infoMessages);
-        if (isInitialLoad || oldMessages !== newMessages) updateScrollingMessages(state.infoMessages);
-
         const line = state.linesData[state.currentLineKey];
         if (line) {
             const stop = line.stops[state.currentStopIndex];
@@ -1079,48 +1690,112 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!isInitialLoad && (lineChanged || stopIndexChanged)) {
                 const direction = (stopIndexChanged && state.currentStopIndex < lastKnownState.currentStopIndex) ? 'prev' : 'next';
-                stopIndicatorEl.className = 'current-stop-indicator exit'; stopNameEl.className = 'exit';
+                stopIndicatorEl.className = 'current-stop-indicator exit';
+                stopNameEl.className = 'exit';
                 setTimeout(() => {
-                    updateContent();
-                    // LOGICA AUDIO STOP
-                    const newStop = line.stops[state.currentStopIndex]; 
+                    updateContent(); // Aggiorna il testo
+
+                    // === LOGICA AUDIO STOP (automatico) ===
+                    const newStop = line.stops[state.currentStopIndex]; // Prendi il *nuovo* stop
                     if (newStop && newStop.audio) {
-                        stopAnnouncementSound.src = newStop.audio; stopAnnouncementSound.currentTime = 0;
+                        // L'audio è caricato come Data URL (Base64)
+                        stopAnnouncementSound.src = newStop.audio;
+                        stopAnnouncementSound.currentTime = 0;
+                        
                         const videoEl = document.getElementById('ad-video');
                         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
-                        if (videoEl && !videoEl.muted) videoEl.volume = Math.min(originalVolume, 0.15);
+                        
+                        // Abbassa il volume del video se è presente
+                        if (videoEl && !videoEl.muted) {
+                            videoEl.volume = Math.min(originalVolume, 0.15);
+                        }
+                        
                         stopAnnouncementSound.play().catch(e => console.error("Errore riproduzione audio fermata:", e));
-                        stopAnnouncementSound.onended = () => { if (videoEl) videoEl.volume = originalVolume; };
+                        
+                        stopAnnouncementSound.onended = () => {
+                            if (videoEl) videoEl.volume = originalVolume;
+                        };
                     }
-                    stopIndicatorEl.classList.remove('exit'); stopNameEl.classList.remove('exit');
+                    // === FINE LOGICA AUDIO STOP ===
+
+                    stopIndicatorEl.classList.remove('exit');
+                    stopNameEl.classList.remove('exit');
                     const enterClass = (direction === 'prev') ? 'enter-reverse' : 'enter';
-                    stopIndicatorEl.classList.add(enterClass); stopNameEl.classList.add('enter');
-                    setTimeout(() => { stopIndicatorEl.classList.remove('enter', 'enter-reverse'); stopNameEl.classList.remove('enter'); }, 500);
+                    stopIndicatorEl.classList.add(enterClass);
+                    stopNameEl.classList.add('enter');
+                    setTimeout(() => {
+                        stopIndicatorEl.classList.remove('enter', 'enter-reverse');
+                        stopNameEl.classList.remove('enter');
+                    }, 500);
                 }, 400);
-            } else { updateContent(); }
+            } else {
+                updateContent(); // Caricamento iniziale, nessun audio
+            }
         }
 
-        if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) playAnnouncement();
+        // Annuncio LINEA (manuale)
+        if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
+            playAnnouncement();
+        }
+
+        // Audio PRENOTAZIONE
         if (state.stopRequested && state.stopRequested.timestamp > (lastKnownState.stopRequested?.timestamp || 0)) {
-            if (bookedSoundViewer) { bookedSoundViewer.currentTime = 0; bookedSoundViewer.play().catch(e => {}); }
+            if (bookedSoundViewer) {
+                bookedSoundViewer.currentTime = 0;
+                bookedSoundViewer.play().catch(e => console.error("Errore riproduzione 'bip' prenotazione:", e));
+            }
         }
 
+        // === LOGICA GESTIONE MEDIA ===
         const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
         const notAvailableChanged = state.videoNotAvailable !== lastKnownState.videoNotAvailable;
-        const playbackChanged = state.playbackState !== lastKnownState.playbackState || state.volumeLevel !== lastKnownState.volumeLevel || (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0));
-        let targetMediaState = '';
-        if (state.videoNotAvailable) targetMediaState = 'not_available';
-        else {
-            if (mediaChanged) targetMediaState = state.mediaSource ? 'loading' : 'default';
-            else if (currentMediaState === null || (notAvailableChanged && currentMediaState === 'not_available')) targetMediaState = state.mediaSource ? 'loading' : 'default';
-            else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) applyMediaPlaybackState(state);
+        const playbackChanged = state.playbackState !== lastKnownState.playbackState ||
+                                  state.volumeLevel !== lastKnownState.volumeLevel ||
+                                  (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0));
+
+        let targetMediaState = ''; // Lo stato che VOGLIAMO raggiungere
+        
+        if (state.videoNotAvailable) {
+            // Caso 1: Priorità massima, "Non Disponibile" è ATTIVO
+            targetMediaState = 'not_available';
+        } else {
+            // Caso 2: "Non Disponibile" è DISATTIVATO. Decidiamo cosa mostrare.
+            if (mediaChanged) {
+                // È appena stato aggiunto/rimosso un media
+                if (state.mediaSource) {
+                    targetMediaState = 'loading'; // Media Aggiunto
+                } else {
+                    targetMediaState = 'default'; // Media Rimosso
+                }
+            } else if (currentMediaState === null || (notAvailableChanged && currentMediaState === 'not_available')) {
+                // È il caricamento iniziale O il toggle "non disponibile" è stato SPENTO
+                if (state.mediaSource) {
+                    targetMediaState = 'loading';
+                } else {
+                    targetMediaState = 'default';
+                }
+            } else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
+                // Caso 3: Solo il playback è cambiato (play/pausa/volume/seek), non serve un reload
+                 applyMediaPlaybackState(state);
+            }
         }
-        if (targetMediaState && targetMediaState !== currentMediaState) loadMedia(targetMediaState, state);
+        
+        if (targetMediaState && targetMediaState !== currentMediaState) {
+            loadMedia(targetMediaState, state);
+        }
+        // === FINE LOGICA MEDIA ===
+        
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
     
-    socket.on('connect', () => { loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati..."; socket.emit('request_initial_state'); });
-    socket.on('disconnect', () => { loaderEl.classList.remove('hidden'); loaderEl.querySelector('p').textContent = "Connessione persa..."; });
+    socket.on('connect', () => {
+        loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
+        socket.emit('request_initial_state');
+    });
+    socket.on('disconnect', () => {
+        loaderEl.classList.remove('hidden');
+        loaderEl.querySelector('p').textContent = "Connessione persa...";
+    });
     socket.on('initial_state', updateDisplay);
     socket.on('state_updated', updateDisplay);
 });
@@ -1130,15 +1805,19 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 # -------------------------------------------------------------------
-# 4. ROUTE E API
+# 4. ROUTE E API WEBSOCKET (MODIFICATO)
 # -------------------------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated: return redirect(url_for('dashboard'))
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
     form = LoginForm()
+
     if form.validate_on_submit():
         username = form.username.data
+
         if username in login_attempts:
             attempt_info = login_attempts[username]
             if attempt_info['attempts'] >= MAX_ATTEMPTS:
@@ -1147,7 +1826,9 @@ def login():
                     remaining_time = round((lockout_end_time - datetime.now()).total_seconds())
                     flash(f"Troppi tentativi falliti. Riprova tra {remaining_time} secondi.", "error")
                     return render_template_string(LOGIN_PAGE_HTML, form=form)
-                else: login_attempts.pop(username, None)
+                else:
+                    login_attempts.pop(username, None)
+
         user_in_db = USERS_DB.get(username)
         if user_in_db and check_password_hash(user_in_db['password_hash'], form.password.data):
             login_attempts.pop(username, None)
@@ -1155,12 +1836,22 @@ def login():
             login_user(user)
             return redirect(request.args.get('next') or url_for('dashboard'))
         else:
-            if username not in login_attempts: login_attempts[username] = {'attempts': 0, 'time': None}
+            if username not in login_attempts:
+                login_attempts[username] = {'attempts': 0, 'time': None}
+            
             login_attempts[username]['attempts'] += 1
             login_attempts[username]['time'] = datetime.now()
-            flash(f"Credenziali non valide.", "error")
+
+            remaining = MAX_ATTEMPTS - login_attempts[username]['attempts']
+            if remaining > 0:
+                flash(f"Credenziali non valide. Hai ancora {remaining} tentativi.", "error")
+            else:
+                flash(f"Account bloccato per {LOCKOUT_TIME_MINUTES} minuti.", "error")
+            
             return render_template_string(LOGIN_PAGE_HTML, form=form)
+    
     return render_template_string(LOGIN_PAGE_HTML, form=form)
+
 
 @app.route('/logout')
 @login_required
@@ -1176,19 +1867,26 @@ def dashboard():
 @app.route('/visualizzatore')
 @login_required
 def pagina_visualizzatore():
+    # Passiamo il template modificato
     return render_template_string(VISUALIZZATORE_COMPLETO_HTML)
 
 @app.route('/announcement-audio')
 @login_required
 def announcement_audio():
-    try: return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
-    except FileNotFoundError: return Response("File audio non trovato.", status=404)
+    try:
+        return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
+    except FileNotFoundError:
+        print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
+        return Response("File audio dell'annuncio non trovato sul server.", status=404)
 
 @app.route('/booked-stop-audio')
 @login_required
 def booked_stop_audio():
-    try: return send_file('bip.mp3', mimetype='audio/mpeg')
-    except FileNotFoundError: return Response("File audio non trovato.", status=404)
+    try:
+        return send_file('bip.mp3', mimetype='audio/mpeg')
+    except FileNotFoundError:
+        print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
+        return Response("File audio di prenotazione non trovato sul server.", status=404)
 
 @app.route('/upload-video', methods=['POST'])
 @login_required
@@ -1197,39 +1895,84 @@ def upload_video():
     if 'video' not in request.files: return jsonify({'error': 'Nessun file inviato'}), 400
     file = request.files['video']
     if file.filename == '': return jsonify({'error': 'Nessun file selezionato'}), 400
+    
+    # --- MODIFICA: Salva su disco, non in memoria ---
+    # 1. Rimuovi il vecchio video se esiste
     if current_video_file['path'] and os.path.exists(current_video_file['path']):
-        try: os.remove(current_video_file['path'])
-        except Exception as e: print(f"Errore rimozione vecchio file: {e}")
+        try:
+            os.remove(current_video_file['path'])
+        except Exception as e:
+            print(f"Errore rimozione vecchio file: {e}")
+
+    # 2. Salva il nuovo file in una directory temporanea
     try:
+        # Crea un nome file temporaneo sicuro
         temp_dir = tempfile.gettempdir()
+        # Usiamo mkstemp per avere un nome unico, poi lo chiudiamo e usiamo il path
         fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix=f"_{file.filename}")
-        os.close(fd)
-        file.save(temp_path)
+        os.close(fd) # Chiudiamo il file descriptor, useremo solo il path
+        
+        file.save(temp_path) # Salva il file in quel path
+        
         current_video_file = {'path': temp_path, 'mimetype': file.mimetype, 'name': file.filename}
+        print(f"Video salvato in: {temp_path}")
         return jsonify({'success': True, 'filename': file.filename})
-    except Exception as e: return jsonify({'error': 'Errore salvataggio'}), 500
+
+    except Exception as e:
+        print(f"Errore salvataggio file: {e}")
+        return jsonify({'error': 'Errore salvataggio file su server'}), 500
+    # --- FINE MODIFICA ---
 
 @app.route('/stream-video')
 @login_required
 def stream_video():
-    if not current_video_file or not current_video_file['path'] or not os.path.exists(current_video_file['path']): abort(404)
-    try: return send_file(current_video_file['path'], mimetype=current_video_file['mimetype'], as_attachment=False)
-    except Exception: abort(500)
+    # --- MODIFICA CHIAVE PER STREAMING DA DISCO ---
+    # Il codice precedente (lettura da memoria con gestione manuale del Range) 
+    # è stato sostituito da send_file, che è molto più robusto.
+    if not current_video_file or not current_video_file['path'] or not os.path.exists(current_video_file['path']):
+        print("Errore stream: file non trovato")
+        abort(404)
+
+    try:
+        # send_file gestisce automaticamente i 'Range headers' (206 Partial Content)
+        # consentendo lo streaming e il seeking di file di grandi dimensioni.
+        return send_file(
+            current_video_file['path'], 
+            mimetype=current_video_file['mimetype'], 
+            as_attachment=False # Importante per il player video
+        )
+    except Exception as e:
+        print(f"Errore durante lo streaming del file: {e}")
+        abort(500)
+    # --- FINE MODIFICA ---
 
 @app.route('/clear-video', methods=['POST'])
 @login_required
 def clear_video():
     global current_video_file
+    # --- MODIFICA: Rimuovi file da disco ---
     if current_video_file['path'] and os.path.exists(current_video_file['path']):
-        try: os.remove(current_video_file['path'])
-        except Exception: pass
+        try:
+            os.remove(current_video_file['path'])
+            print(f"File rimosso: {current_video_file['path']}")
+        except Exception as e:
+            print(f"Errore rimozione file: {e}")
+    # --- FINE MODIFICA ---
     current_video_file = {'path': None, 'mimetype': None, 'name': None}
     return jsonify({'success': True})
+
+# --- GESTIONE WEBSOCKET (Invariato) ---
 
 @socketio.on('connect')
 def handle_connect():
     if not current_user.is_authenticated: return False
-    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
+    print(f"Client autorizzato connesso: {current_user.name} ({request.sid})")
+    if current_app_state: 
+        socketio.emit('initial_state', current_app_state, room=request.sid)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    if hasattr(current_user, 'name'): print(f"Client {current_user.name} disconnesso.")
 
 @socketio.on('update_all')
 def handle_update_all(data):
@@ -1242,10 +1985,25 @@ def handle_update_all(data):
 @socketio.on('request_initial_state')
 def handle_request_initial_state():
     if not current_user.is_authenticated: return
-    if current_app_state: socketio.emit('initial_state', current_app_state, room=request.sid)
+    if current_app_state: 
+        socketio.emit('initial_state', current_app_state, room=request.sid)
+
+# -------------------------------------------------------------------
+# 5. BLOCCO DI ESECUZIONE
+# -------------------------------------------------------------------
 
 if __name__ == '__main__':
     local_ip = get_local_ip()
-    print(f"Login: http://127.0.0.1:5000/login | http://{local_ip}:5000/login")
-    try: socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
-    except ImportError: socketio.run(app, host='0.0.0.0', port=5000)
+    print("===================================================================")
+    print("   SERVER HARZAFI v17 (STREAMING DA DISCO E MODALE ERRORE)")
+    print("===================================================================")
+    print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
+    print("Credenziali di default: admin / adminpass")
+    print("===================================================================")
+    try:
+        # Per un ambiente di produzione, si raccomanda l'uso di gunicorn/eventlet
+        socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    except ImportError:
+        print("\n--- ATTENZIONE: 'eventlet' non trovato. Eseguo in modalità standard. ---")
+        print("--- Per la produzione, assicurati di averlo installato. ---")
+        socketio.run(app, host='0.0.0.0', port=5000)
