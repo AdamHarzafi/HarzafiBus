@@ -1197,7 +1197,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <title>Visualizzazione Fermata Harzafi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         :root {
@@ -1399,9 +1399,122 @@ VISUALIZZATORE_COMPLETO_HTML = """
             filter: brightness(1.1);
         }
         /* === FINE STILI MODALE === */
+
+        /* Stili per il nuovo banner */
+        #top-banner {
+            position: fixed;
+            top: 20px; /* Un po' di spazio dal bordo superiore */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 95%;
+            max-width: 1800px; /* Larghezza massima */
+            height: 80px;
+            background: rgba(255, 255, 255, 0.1); /* Sfondo chiaro e semi-trasparente */
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            z-index: 1500; /* Sopra gli altri elementi */
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            font-family: 'Montserrat', sans-serif; /* Usa lo stesso font del resto del visualizzatore */
+        }
+
+        .banner-left, .banner-right {
+            flex-shrink: 0;
+            flex-basis: 200px; /* Larghezza fissa per le sezioni laterali */
+        }
+
+        .banner-left {
+            text-align: left;
+        }
+
+        #banner-clock {
+            font-size: 36px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        #banner-date {
+            font-size: 18px;
+            font-weight: 600;
+            opacity: 0.8;
+        }
+
+        .banner-right {
+            text-align: right;
+        }
+
+        #banner-logo {
+            font-size: 36px;
+            font-weight: 900;
+            letter-spacing: -1px;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        .banner-center {
+            flex-grow: 1;
+            margin: 0 30px;
+            overflow: hidden; /* Nasconde il testo che esce */
+            position: relative;
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .scrolling-text-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            mask-image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+        }
+
+        #scrolling-text {
+            margin: 0;
+            padding-left: 100%; /* Inizia fuori dallo schermo a destra */
+            font-size: 32px;
+            font-weight: 700;
+            color: #ffffff;
+            white-space: nowrap; /* Impedisce al testo di andare a capo */
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            will-change: transform; /* Ottimizzazione per l'animazione */
+            animation: scroll-text 30s linear infinite;
+        }
+
+        @keyframes scroll-text {
+            from {
+                transform: translate(0, -50%);
+            }
+            to {
+                transform: translate(-100%, -50%);
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Banner Superiore -->
+    <div id="top-banner">
+        <div class="banner-left">
+            <div id="banner-clock"></div>
+            <div id="banner-date"></div>
+        </div>
+        <div class="banner-center">
+            <div class="scrolling-text-container">
+                <p id="scrolling-text"></p>
+            </div>
+        </div>
+        <div class="banner-right">
+            <span id="banner-logo">HARZAFI</span>
+        </div>
+    </div>
+
     <audio id="announcement-sound" src="/announcement-audio" preload="auto"></audio>
     <audio id="stop-announcement-sound" preload="auto" style="display:none;"></audio>
     <audio id="booked-sound-viewer" src="{{ url_for('booked_stop_audio') }}" preload="auto" style="display:none;"></audio>
@@ -1471,6 +1584,30 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('close-error-modal-btn').addEventListener('click', () => {
             videoErrorOverlay.classList.remove('visible');
         });
+    }
+
+    function updateClockAndDate() {
+        const clockEl = document.getElementById('banner-clock');
+        const dateEl = document.getElementById('banner-date');
+        if (!clockEl || !dateEl) return;
+
+        const now = new Date();
+        
+        const timeOptions = {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+            timeZone: 'Europe/Rome'
+        };
+        clockEl.textContent = new Intl.DateTimeFormat('it-IT', timeOptions).format(now);
+
+        const dateOptions = {
+            day: '2-digit',
+            month: '2-digit',
+            year: '2-digit'
+        };
+        dateEl.textContent = new Intl.DateTimeFormat('it-IT', dateOptions).format(now);
     }
     
     function applyMediaPlaybackState(state) {
@@ -1784,6 +1921,28 @@ document.addEventListener('DOMContentLoaded', () => {
             loadMedia(targetMediaState, state);
         }
         // === FINE LOGICA MEDIA ===
+
+        // === NUOVA LOGICA PER TESTO SCORREVOLE ===
+        const scrollingTextEl = document.getElementById('scrolling-text');
+        if (scrollingTextEl && state.infoMessages && state.infoMessages.length > 0) {
+            const newText = state.infoMessages.join(' +++ '); // Separatore più visibile
+            if (scrollingTextEl.textContent !== newText) {
+                scrollingTextEl.textContent = newText;
+                
+                // Dinamicamente aggiusto la durata dell'animazione
+                const textLength = newText.length;
+                const duration = Math.max(20, textLength / 8); // Rallento un po'
+                
+                // Rimuovi l'animazione esistente e riapplicala per ricalcolare la lunghezza
+                scrollingTextEl.style.animation = 'none';
+                // Force reflow
+                scrollingTextEl.offsetHeight; 
+                scrollingTextEl.style.animation = `scroll-text ${duration}s linear infinite`;
+            }
+        } else if (scrollingTextEl) {
+            scrollingTextEl.textContent = ''; // Svuota se non ci sono messaggi
+        }
+        // === FINE LOGICA TESTO SCORREVOLE ===
         
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
@@ -1798,6 +1957,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     socket.on('initial_state', updateDisplay);
     socket.on('state_updated', updateDisplay);
+
+    // Avvia l'orologio
+    updateClockAndDate();
+    setInterval(updateClockAndDate, 1000);
 });
 </script>
 </body>
