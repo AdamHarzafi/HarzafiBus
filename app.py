@@ -1400,10 +1400,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         /* === FINE STILI MODALE === */
 
-        /* Stili per il nuovo banner */
-        #top-banner {
+        /* Stili per il banner informativo */
+        #info-banner {
             position: fixed;
-            top: 20px; /* Un po' di spazio dal bordo superiore */
+            bottom: 20px; /* Spostato in basso */
             left: 50%;
             transform: translateX(-50%);
             width: 95%;
@@ -1448,12 +1448,10 @@ VISUALIZZATORE_COMPLETO_HTML = """
             text-align: right;
         }
 
-        #banner-logo {
-            font-size: 36px;
-            font-weight: 900;
-            letter-spacing: -1px;
-            color: #fff;
-            text-transform: uppercase;
+        #banner-logo-img {
+            height: 45px;
+            width: auto;
+            vertical-align: middle;
         }
 
         .banner-center {
@@ -1499,8 +1497,8 @@ VISUALIZZATORE_COMPLETO_HTML = """
     </style>
 </head>
 <body>
-    <!-- Banner Superiore -->
-    <div id="top-banner">
+    <!-- Banner Informativo -->
+    <div id="info-banner">
         <div class="banner-left">
             <div id="banner-clock"></div>
             <div id="banner-date"></div>
@@ -1511,7 +1509,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             </div>
         </div>
         <div class="banner-right">
-            <span id="banner-logo">HARZAFI</span>
+            <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" id="banner-logo-img">
         </div>
     </div>
 
