@@ -1271,12 +1271,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
         #stop-name.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
         #stop-subtitle { font-size: 34px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
-        
-        .logo {
-            position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
-            filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
-        }
-        .logo.visible { opacity: 0.9; }
 
         @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
@@ -1540,7 +1534,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         <div id="video-player-container" class="aspect-ratio-16-9"></div>
     </div>
     
-    <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
     <div id="service-offline-overlay">
         <div class="overlay-content">
             <h2>NESSUN SERVIZIO</h2>
