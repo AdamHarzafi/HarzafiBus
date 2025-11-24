@@ -1399,7 +1399,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             filter: brightness(1.1);
         }
 
-        /* === NUOVI STILI PER BARRA INFORMATIVA INFERIORE === */
+        /* === NUOVI STILI PER BARRA INFORMATIVA INFERIORE (VETROSO, CON OVERLAY FROST) === */
         .info-bar {
             position: fixed;
             bottom: 30px;
@@ -1408,35 +1408,44 @@ VISUALIZZATORE_COMPLETO_HTML = """
             width: calc(100% - 60px);
             max-width: 1800px;
             height: 80px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-radius: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+            /* Traslucido chiaro per effetto vetro (non scuro) */
+            background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06));
+            backdrop-filter: blur(14px) saturate(120%);
+            -webkit-backdrop-filter: blur(14px) saturate(120%);
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.18);
+            box-shadow: 0 18px 40px rgba(0,0,0,0.35);
             z-index: 500;
             display: flex;
             align-items: center;
-            padding: 0 30px;
+            padding: 0 28px;
             color: white;
             opacity: 0;
-            animation: slideInFromBottomFadeIn 1s ease-out 0.5s forwards;
+            animation: slideInFromBottomFadeIn 1s ease-out 0.45s forwards;
+            overflow: visible;
         }
 
         .info-bar-left {
             flex-shrink: 0;
-            text-align: center;
+            text-align: left;
+            position: relative;
+            z-index: 540; /* Sempre sopra il pannello vetroso */
+            width: 170px;
         }
         #info-bar-time {
-            font-size: 36px;
-            font-weight: 700;
+            font-size: 34px;
+            font-weight: 800;
             line-height: 1;
+            color: #FFFFFF;
+            text-shadow: 0 4px 18px rgba(0,0,0,0.45);
         }
         #info-bar-date {
-            font-size: 16px;
-            font-weight: 600;
-            opacity: 0.8;
-            letter-spacing: 0.5px;
+            font-size: 14px;
+            font-weight: 700;
+            opacity: 0.95;
+            letter-spacing: 0.6px;
+            margin-top: 4px;
+            color: rgba(255,255,255,0.95);
         }
 
         .info-bar-center {
@@ -1444,24 +1453,66 @@ VISUALIZZATORE_COMPLETO_HTML = """
             overflow: hidden;
             height: 100%;
             position: relative;
-            /* Effetto di dissolvenza ai lati per il testo */
-            mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
-            -webkit-mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
+            display: flex; align-items: center;
+            justify-content: center;
+            padding: 0 20px;
         }
+        /* Marquee: posto sotto gli overlay; verrà sfocato quando passa sotto gli overlay grazie a backdrop-filter */
         #marquee-text {
             position: absolute;
             top: 50%;
+            left: 0;
             transform: translateY(-50%);
-            font-size: 32px;
+            font-size: 30px;
             font-weight: 700;
             white-space: nowrap;
-            will-change: transform;
-            animation: marquee 30s linear infinite;
+            will-change: transform, filter;
+            z-index: 510; /* sotto gli overlay */
+            animation: marquee 28s linear infinite;
+            color: rgba(20,20,20,0.95);
+            -webkit-text-stroke: 0.2px rgba(255,255,255,0.12);
         }
-        @keyframes marquee { from { transform: translate(100%, -50%); } to { transform: translate(-100%, -50%); } }
+        @keyframes marquee { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
 
-        .info-bar-right img { height: 45px; flex-shrink: 0; filter: brightness(0) invert(1); opacity: 0.9; }
-        /* === FINE STILI MODALE === */
+        /* Logo: posto sopra gli overlay per rimanere nitido */
+        .info-bar-right { position: relative; z-index: 540; display:flex; align-items:center; gap:12px; }
+        .info-bar-right img { height: 50px; flex-shrink: 0; filter: none; opacity: 1; }
+
+        /* Zone vetrose sovrapposte che applicano blur (backdrop-filter) al contenuto sottostante
+           - Queste sono posizionate tra il marquee e gli elementi left/right. Gli elementi left/right
+             hanno z-index maggiore quindi non saranno sfocati; il testo scorre sotto e viene sfocato.
+        */
+        .info-bar-frost-left, .info-bar-frost-right {
+            position: absolute;
+            top: 6px;
+            bottom: 6px;
+            width: 200px;
+            border-radius: 22px;
+            background: rgba(255,255,255,0.02);
+            backdrop-filter: blur(8px) saturate(120%);
+            -webkit-backdrop-filter: blur(8px) saturate(120%);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+            z-index: 525; /* sopra il testo, sotto il logo/time */
+            pointer-events: none;
+            transition: transform 0.3s cubic-bezier(0.2,0.9,0.2,1), opacity 0.25s;
+        }
+        .info-bar-frost-left { left: 18px; transform: translateX(0); }
+        .info-bar-frost-right { right: 18px; transform: translateX(0); }
+
+        /* Piccoli accenti lucidi per rendere la barra più rifinita */
+        .info-bar .glass-highlight {
+            position: absolute; left: 0; right: 0; top: 0; height: 10px; border-radius: 30px 30px 0 0; pointer-events: none;
+            background: linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.02)); mix-blend-mode: overlay; z-index: 530;
+        }
+
+        /* Fallback per browser senza supporto backdrop-filter: applica una semi-trasparenza e sfoca solo background */
+        @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+            .info-bar-frost-left, .info-bar-frost-right { background: rgba(255,255,255,0.06); filter: saturate(80%); }
+            .info-bar { background: rgba(255,255,255,0.08); }
+        }
+
+        /* === FINE STILI BARRA === */
     </style>
 </head>
 <body>
@@ -1501,14 +1552,24 @@ VISUALIZZATORE_COMPLETO_HTML = """
     </div>
 
     <!-- NUOVA BARRA INFORMATIVA INFERIORE -->
-    <div class="info-bar">
+    <div class="info-bar" role="region" aria-label="Barra informativa">
+        <!-- elemento di highlight lucido (accento superiore) -->
+        <div class="glass-highlight" aria-hidden="true"></div>
+
+        <!-- Frost overlays: questi elementi applicano backdrop-filter e sfocano il contenuto sottostante
+             quando il testo scorre sotto di essi. Mettiamo gli elementi time/logo sopra gli overlay. -->
+        <div class="info-bar-frost-left" aria-hidden="true"></div>
+        <div class="info-bar-frost-right" aria-hidden="true"></div>
+
         <div class="info-bar-left">
-            <div id="info-bar-time">--:--</div>
-            <div id="info-bar-date">--/--/--</div>
+            <div id="info-bar-time" aria-live="polite">--:--</div>
+            <div id="info-bar-date" aria-live="polite">--/--/--</div>
         </div>
+
         <div class="info-bar-center">
-            <span id="marquee-text"></span>
+            <span id="marquee-text" aria-hidden="true"></span>
         </div>
+
         <div class="info-bar-right">
             <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi">
         </div>
