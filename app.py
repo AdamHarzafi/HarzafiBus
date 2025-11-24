@@ -1398,6 +1398,69 @@ VISUALIZZATORE_COMPLETO_HTML = """
         .error-modal-content button:hover {
             filter: brightness(1.1);
         }
+
+        /* === NUOVI STILI PER BARRA INFORMATIVA INFERIORE === */
+        .info-bar {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 60px);
+            max-width: 1800px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            padding: 0 30px;
+            color: white;
+            opacity: 0;
+            animation: slideInFromBottomFadeIn 1s ease-out 0.5s forwards;
+        }
+
+        .info-bar-left {
+            flex-shrink: 0;
+            text-align: center;
+        }
+        #info-bar-time {
+            font-size: 36px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        #info-bar-date {
+            font-size: 16px;
+            font-weight: 600;
+            opacity: 0.8;
+            letter-spacing: 0.5px;
+        }
+
+        .info-bar-center {
+            flex-grow: 1;
+            overflow: hidden;
+            height: 100%;
+            position: relative;
+            /* Effetto di dissolvenza ai lati per il testo */
+            mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
+        }
+        #marquee-text {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 32px;
+            font-weight: 700;
+            white-space: nowrap;
+            will-change: transform;
+            animation: marquee 30s linear infinite;
+        }
+        @keyframes marquee { from { transform: translate(100%, -50%); } to { transform: translate(-100%, -50%); } }
+
+        .info-bar-right img { height: 45px; flex-shrink: 0; filter: brightness(0) invert(1); opacity: 0.9; }
         /* === FINE STILI MODALE === */
     </style>
 </head>
@@ -1434,6 +1497,20 @@ VISUALIZZATORE_COMPLETO_HTML = """
         <div class="overlay-content">
             <h2>NESSUN SERVIZIO</h2>
             <p>AL MOMENTO, IL SISTEMA NON È DISPONIBILE.</p>
+        </div>
+    </div>
+
+    <!-- NUOVA BARRA INFORMATIVA INFERIORE -->
+    <div class="info-bar">
+        <div class="info-bar-left">
+            <div id="info-bar-time">--:--</div>
+            <div id="info-bar-date">--/--/--</div>
+        </div>
+        <div class="info-bar-center">
+            <span id="marquee-text"></span>
+        </div>
+        <div class="info-bar-right">
+            <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi">
         </div>
     </div>
 
@@ -1788,6 +1865,37 @@ document.addEventListener('DOMContentLoaded', () => {
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
     
+    /**
+     * =============================================
+     * FUNZIONI PER BARRA INFERIORE (OROLOGIO E TESTO)
+     * =============================================
+     */
+    function updateClock() {
+        const timeEl = document.getElementById('info-bar-time');
+        const dateEl = document.getElementById('info-bar-date');
+        
+        // Forza il fuso orario di Roma
+        const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Europe/Rome"}));
+        
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = String(now.getFullYear()).slice(-2);
+
+        if (timeEl) timeEl.textContent = `${hours}:${minutes}`;
+        if (dateEl) dateEl.textContent = `${day}/${month}/${year}`;
+    }
+
+    function updateMarquee(messages) {
+        const marqueeEl = document.getElementById('marquee-text');
+        if (marqueeEl && messages && messages.length > 0) {
+            // Unisce tutti i messaggi con un separatore visivo per creare un flusso continuo
+            marqueeEl.textContent = messages.join('  •  ') + '  •  ';
+        }
+    }
+
     socket.on('connect', () => {
         loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
         socket.emit('request_initial_state');
@@ -1796,8 +1904,16 @@ document.addEventListener('DOMContentLoaded', () => {
         loaderEl.classList.remove('hidden');
         loaderEl.querySelector('p').textContent = "Connessione persa...";
     });
-    socket.on('initial_state', updateDisplay);
-    socket.on('state_updated', updateDisplay);
+    socket.on('initial_state', (state) => {
+        updateDisplay(state);
+        updateMarquee(state.infoMessages);
+    });
+    socket.on('state_updated', (state) => {
+        updateDisplay(state);
+        updateMarquee(state.infoMessages);
+    });
+
+    setInterval(updateClock, 1000); // Aggiorna l'orologio ogni secondo
 });
 </script>
 </body>
