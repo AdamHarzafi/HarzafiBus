@@ -1187,7 +1187,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO con Modale di Errore) ---
+# --- VISUALIZZATORE (MODIFICATO CON LIQUID GLASS TICKER BAR) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1272,7 +1272,12 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #stop-name.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
         #stop-subtitle { font-size: 34px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
         
+        /* 
+         * LOGO VECCHIO - NASCOSTO/MODIFICATO PERCHE' SPOSTATO NELLA BARRA IN BASSO.
+         * NON CANCELLATO, MA RESO INVISIBILE E NON INFLUENTE SUL LAYOUT.
+         */
         .logo {
+            display: none; /* Nascondiamo la vecchia implementazione del logo */
             position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
             filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
         }
@@ -1399,6 +1404,126 @@ VISUALIZZATORE_COMPLETO_HTML = """
             filter: brightness(1.1);
         }
         /* === FINE STILI MODALE === */
+
+        /* 
+         * =========================================
+         *   LIQUID GLASS TICKER BAR (NEW ADDITION)
+         * =========================================
+         */
+        .glass-ticker-container {
+            position: absolute;
+            bottom: 30px; /* Margine dal basso */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 95%; /* Larghezza del rettangolo */
+            height: 90px; /* Altezza del rettangolo */
+            border-radius: 20px; /* Bordi arrotondati */
+            
+            /* Stile Liquid Glass / Glassmorphism */
+            background: rgba(255, 255, 255, 0.15); /* Bianco semitrasparente (non scuro) */
+            backdrop-filter: blur(15px); /* Effetto blur sullo sfondo dietro la barra */
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.3); /* Bordo sottile e chiaro */
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3); /* Ombra morbida */
+            
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            overflow: hidden; /* Importante per tagliare il testo che scorre fuori */
+            z-index: 100; /* Sopra tutto il resto */
+        }
+
+        /* Contenitore Sinistro (Orologio e Data) */
+        .ticker-left {
+            width: 250px; /* Larghezza fissa */
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0 15px;
+            z-index: 102; /* Più alto del testo scorrevole */
+            
+            /* Sfondo semitrasparente e blur per rendere leggibile sopra il testo che passa sotto */
+            background: rgba(255, 255, 255, 0.1); 
+            backdrop-filter: blur(20px); 
+            -webkit-backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #ticker-time {
+            font-size: 32px;
+            font-weight: 900;
+            line-height: 1;
+            margin-bottom: 5px;
+            color: #fff;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        #ticker-date {
+            font-size: 16px;
+            font-weight: 600;
+            opacity: 0.9;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        /* Contenitore Destro (Logo Harzafi) */
+        .ticker-right {
+            width: 250px; /* Larghezza fissa */
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 15px;
+            z-index: 102; /* Più alto del testo scorrevole */
+            
+            /* Sfondo semitrasparente e blur per rendere leggibile sopra il testo che passa sotto */
+            background: rgba(255, 255, 255, 0.1); 
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-left: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .ticker-right img {
+            max-width: 80%;
+            max-height: 70%;
+            filter: drop-shadow(0 2px 5px rgba(0,0,0,0.3));
+        }
+
+        /* Contenitore Centrale (Testo scorrevole) */
+        .ticker-center {
+            flex-grow: 1; /* Occupa tutto lo spazio rimanente */
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            z-index: 101; /* Più basso di sx e dx, così il testo "passa sotto" */
+        }
+
+        .scrolling-text {
+            white-space: nowrap;
+            position: absolute;
+            font-size: 36px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            animation: scroll-left 25s linear infinite;
+        }
+
+        /* Animazione Scorrimento */
+        @keyframes scroll-left {
+            0% {
+                transform: translateX(100%); /* Parte da destra (fuori dal contenitore centrale) */
+                left: 100%; 
+            }
+            100% {
+                transform: translateX(-100%); /* Finisce a sinistra */
+                left: -100%; 
+            }
+        }
+        
     </style>
 </head>
 <body>
@@ -1429,7 +1554,35 @@ VISUALIZZATORE_COMPLETO_HTML = """
         <div id="video-player-container" class="aspect-ratio-16-9"></div>
     </div>
     
+    <!-- VECCHIO LOGO (LASCIATO NEL CODICE MA NASCOSTO DA CSS) -->
     <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
+
+    <!-- 
+      =========================================
+        NUOVA BARRA LIQUID GLASS TICKER
+      =========================================
+    -->
+    <div class="glass-ticker-container">
+        <!-- Lato Sinistro: Orologio e Data -->
+        <div class="ticker-left">
+            <div id="ticker-time">--:--</div>
+            <div id="ticker-date">--/--/--</div>
+        </div>
+
+        <!-- Centro: Testo Scorrevole -->
+        <div class="ticker-center">
+            <div class="scrolling-text" id="ticker-marquee">
+                BENVENUTI A BORDO - HARZAFI TRANSPORT SYSTEM
+            </div>
+        </div>
+
+        <!-- Lato Destro: Logo -->
+        <div class="ticker-right">
+            <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi Ticker">
+        </div>
+    </div>
+    <!-- FINE BARRA TICKER -->
+
     <div id="service-offline-overlay">
         <div class="overlay-content">
             <h2>NESSUN SERVIZIO</h2>
@@ -1455,6 +1608,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopAnnouncementSound = document.getElementById('stop-announcement-sound'); // Nuovo selettore
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
     
+    // --- NUOVI ELEMENTI TICKER ---
+    const tickerTime = document.getElementById('ticker-time');
+    const tickerDate = document.getElementById('ticker-date');
+    const tickerMarquee = document.getElementById('ticker-marquee');
+    
     // --- NUOVO SELETTORE PER MODALE ERRORE ---
     const videoErrorOverlay = document.getElementById('video-error-overlay');
 
@@ -1465,6 +1623,30 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastKnownState = {};
     let currentMediaState = null;
     let mediaTimeout = null;
+
+    // --- LOGICA OROLOGIO E DATA (ITALIA/ROMA) ---
+    function updateClock() {
+        const now = new Date();
+        // Ora Italia
+        const timeString = now.toLocaleTimeString('it-IT', { 
+            timeZone: 'Europe/Rome', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+        // Data Italia
+        const dateString = now.toLocaleDateString('it-IT', { 
+            timeZone: 'Europe/Rome',
+            day: '2-digit',
+            month: '2-digit',
+            year: '2-digit'
+        });
+        
+        if(tickerTime) tickerTime.textContent = timeString;
+        if(tickerDate) tickerDate.textContent = dateString;
+    }
+    // Avvia orologio subito e aggiorna ogni secondo
+    updateClock();
+    setInterval(updateClock, 1000);
 
     // --- NUOVO LISTENER PER CHIUDERE IL MODALE ---
     if (videoErrorOverlay) {
@@ -1672,7 +1854,16 @@ document.addEventListener('DOMContentLoaded', () => {
         
         loaderEl.classList.add('hidden');
         containerEl.classList.add('visible');
-        logoEl.classList.add('visible');
+        // logoEl.classList.add('visible'); // RIMOSSO PERCHE' ORA IL LOGO E' STATICO NELLA BARRA
+
+        // --- AGGIORNAMENTO MESSAGGI SCORREVOLI ---
+        if (state.infoMessages && Array.isArray(state.infoMessages)) {
+            const messagesString = state.infoMessages.join("  •  ");
+            // Aggiorna solo se il testo è cambiato per evitare reset animazione
+            if (tickerMarquee.innerHTML !== messagesString) {
+                tickerMarquee.innerHTML = messagesString || "BENVENUTI A BORDO - HARZAFI TRANSPORT SYSTEM";
+            }
+        }
         
         const line = state.linesData[state.currentLineKey];
         if (line) {
@@ -1995,7 +2186,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v17 (STREAMING DA DISCO E MODALE ERRORE)")
+    print("   SERVER HARZAFI v18 (LIQUID GLASS TICKER - DATE/TIME/LOGO)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
