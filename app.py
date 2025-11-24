@@ -1552,24 +1552,14 @@ VISUALIZZATORE_COMPLETO_HTML = """
     </div>
 
     <!-- NUOVA BARRA INFORMATIVA INFERIORE -->
-    <div class="info-bar" role="region" aria-label="Barra informativa">
-        <!-- elemento di highlight lucido (accento superiore) -->
-        <div class="glass-highlight" aria-hidden="true"></div>
-
-        <!-- Frost overlays: questi elementi applicano backdrop-filter e sfocano il contenuto sottostante
-             quando il testo scorre sotto di essi. Mettiamo gli elementi time/logo sopra gli overlay. -->
-        <div class="info-bar-frost-left" aria-hidden="true"></div>
-        <div class="info-bar-frost-right" aria-hidden="true"></div>
-
+    <div class="info-bar">
         <div class="info-bar-left">
-            <div id="info-bar-time" aria-live="polite">--:--</div>
-            <div id="info-bar-date" aria-live="polite">--/--/--</div>
+            <div id="info-bar-time">--:--</div>
+            <div id="info-bar-date">--/--/--</div>
         </div>
-
         <div class="info-bar-center">
-            <span id="marquee-text" aria-hidden="true"></span>
+            <span id="marquee-text"></span>
         </div>
-
         <div class="info-bar-right">
             <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi">
         </div>
