@@ -1515,11 +1515,9 @@ VISUALIZZATORE_COMPLETO_HTML = """
             font-weight: 700;
             white-space: nowrap;
             will-change: transform;
-            /* Animation set by JS dynamically for constant speed */
+            /* Animation gestita via JS */
         }
-        @keyframes marquee { from { transform: translate(100%, -50%); } to { transform: translate(-100%, -50%); } }
 
-        /* MODIFICA: LOGO FILTRO BIANCO ATTIVATO */
         .info-bar-right img { 
             height: 45px; 
             flex-shrink: 0; 
@@ -1602,15 +1600,90 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastKnownState = {};
     let currentMediaState = null;
     let mediaTimeout = null;
-    
-    // FIX PER IL MARQUEE SCOMPARSO: Memorizza lo stato del testo
-    let currentMarqueeText = '';
 
     if (videoErrorOverlay) {
         document.getElementById('close-error-modal-btn').addEventListener('click', () => {
             videoErrorOverlay.classList.remove('visible');
         });
     }
+
+    // --- GESTIONE AVANZATA DEL MARQUEE (SCORRIMENTO TESTO) ---
+    const marqueeEl = document.getElementById('marquee-text');
+    let nextMessageQueue = null; // Coda per il prossimo messaggio
+    let isMarqueeRunning = false; // Flag per sapere se sta animando
+
+    function updateMarquee(messages) {
+        if (!marqueeEl) return;
+        
+        // Costruisci la stringa del messaggio
+        const newText = (messages && messages.length > 0) ? messages.join('  •  ') + '  •  ' : '';
+
+        // Se l'animazione NON sta girando, avviala subito col nuovo testo
+        if (!isMarqueeRunning) {
+            runMarqueeRound(newText);
+        } else {
+            // Se sta già girando, metti in coda il nuovo testo.
+            // Il ciclo attuale finirà con il vecchio testo, aspetterà 1 secondo,
+            // e poi prenderà questo valore dalla coda.
+            nextMessageQueue = newText;
+        }
+    }
+
+    function runMarqueeRound(textToPlay) {
+        // Se non c'è testo, ferma tutto e pulisci
+        if (!textToPlay) {
+            marqueeEl.innerHTML = '';
+            isMarqueeRunning = false;
+            nextMessageQueue = null;
+            return;
+        }
+
+        isMarqueeRunning = true;
+        marqueeEl.innerHTML = textToPlay;
+
+        // Calcola distanze e velocità
+        const containerWidth = marqueeEl.parentElement.offsetWidth;
+        const textWidth = marqueeEl.scrollWidth;
+        // Velocità in pixel al secondo
+        const speedPxPerSec = 150; 
+        
+        // Posiziona il testo completamente a destra (fuori schermo)
+        marqueeEl.style.transition = 'none';
+        marqueeEl.style.transform = `translateX(${containerWidth}px)`;
+
+        // Forza un reflow per applicare la posizione iniziale
+        marqueeEl.offsetHeight;
+
+        // Calcola durata: (distanza totale) / velocità
+        // Distanza totale = larghezza contenitore (entrata) + larghezza testo (uscita)
+        const duration = (containerWidth + textWidth) / speedPxPerSec;
+
+        // Avvia l'animazione verso sinistra (fuori schermo)
+        marqueeEl.style.transition = `transform ${duration}s linear`;
+        marqueeEl.style.transform = `translateX(-${textWidth}px)`;
+
+        // Quando l'animazione finisce...
+        const onAnimationEnd = () => {
+            marqueeEl.removeEventListener('transitionend', onAnimationEnd);
+            
+            // LA BARRA ORA È BIANCA (VUOTA). 
+            // ASPETTA 1 SECONDO ESATTO PRIMA DI RIPARTIRE.
+            setTimeout(() => {
+                // Controlla se c'è un messaggio nuovo in coda (l'admin ha cambiato testo)
+                let nextText = textToPlay;
+                if (nextMessageQueue !== null) {
+                    nextText = nextMessageQueue;
+                    nextMessageQueue = null; // Svuota la coda
+                }
+                
+                // Riavvia il ciclo
+                runMarqueeRound(nextText);
+            }, 1000);
+        };
+
+        marqueeEl.addEventListener('transitionend', onAnimationEnd);
+    }
+    // --- FINE GESTIONE MARQUEE ---
     
     function applyMediaPlaybackState(state) {
         const videoEl = document.getElementById('ad-video');
@@ -1907,48 +1980,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (dateEl) dateEl.textContent = `${day}/${month}/${year}`;
     }
 
-    function updateMarquee(messages) {
-        const marqueeEl = document.getElementById('marquee-text');
-        
-        if (marqueeEl) {
-            // FIX: Calcola il nuovo testo
-            const newText = (messages && messages.length > 0) ? messages.join('  •  ') + '  •  ' : '';
-            
-            // FIX: Se il testo è IDENTICO a quello attuale, non fare NULLA.
-            // Questo impedisce il reset dell'animazione quando cambi fermata.
-            if (newText === currentMarqueeText) {
-                return;
-            }
-
-            // Aggiorna la variabile di stato e l'HTML
-            currentMarqueeText = newText;
-            marqueeEl.innerHTML = newText;
-            
-            // Se c'è testo, ricalcola l'animazione. Se è vuoto, svuota.
-            if (newText !== '') {
-                // --- CALCOLO VELOCITÀ COSTANTE ---
-                // Attende un attimo che il DOM si aggiorni per calcolare la larghezza
-                setTimeout(() => {
-                    const containerWidth = marqueeEl.parentElement.offsetWidth;
-                    const textWidth = marqueeEl.scrollWidth;
-                    
-                    // PIXELS AL SECONDO
-                    const speed = 100; 
-                    
-                    // Calcola durata
-                    const duration = (textWidth + containerWidth) / speed;
-                    
-                    // Reset animazione
-                    marqueeEl.style.animation = 'none';
-                    marqueeEl.offsetHeight; /* trigger reflow */
-                    marqueeEl.style.animation = `marquee ${duration}s linear infinite`;
-                }, 100);
-            } else {
-                 marqueeEl.style.animation = 'none';
-            }
-        }
-    }
-
+    // GESTIONE SOCKET
     socket.on('connect', () => {
         loaderEl.querySelector('p').textContent = "Connesso. In attesa di dati...";
         socket.emit('request_initial_state');
@@ -2149,7 +2181,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v20 (FIX MARQUEE & NUOVI COLORI)")
+    print("   SERVER HARZAFI v20 (FIX MARQUEE 1 SECONDO PAUSA)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
