@@ -228,7 +228,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (MODIFICATO CON EDITOR VISUALE) ---
+# --- PANNELLO DI CONTROLLO (AGGIUNTI COLORI NUOVI) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -555,6 +555,10 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                         <button type="button" class="fmt-btn" style="color: #30D158;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#30D158')">Verde</button>
                         <button type="button" class="fmt-btn" style="color: #FFD60A;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#FFD60A')">Giallo</button>
                         <button type="button" class="fmt-btn" style="color: #FFFFFF;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#FFFFFF')">Bianco</button>
+                        <button type="button" class="fmt-btn" style="color: #FF9F0A;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#FF9F0A')">Arancio</button>
+                        <button type="button" class="fmt-btn" style="color: #0A84FF;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#0A84FF')">Blu</button>
+                        <button type="button" class="fmt-btn" style="color: #BF5AF2;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#BF5AF2')">Viola</button>
+                        <button type="button" class="fmt-btn" style="color: #64D2FF;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#64D2FF')">Ciano</button>
                      </div>
                      <div id="info-messages-editor" class="wysiwyg-editor" contenteditable="true"></div>
                      <button id="save-messages-btn" class="btn-primary" style="margin-top: 10px;">Salva Messaggi</button>
@@ -1254,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO: LOGO BIANCO, VELOCITÀ COSTANTE) ---
+# --- VISUALIZZATORE (MODIFICATO: LOGICA MARQUEE FIXATA) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1598,6 +1602,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastKnownState = {};
     let currentMediaState = null;
     let mediaTimeout = null;
+    
+    // FIX PER IL MARQUEE SCOMPARSO: Memorizza lo stato del testo
+    let currentMarqueeText = '';
 
     if (videoErrorOverlay) {
         document.getElementById('close-error-modal-btn').addEventListener('click', () => {
@@ -1902,31 +1909,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateMarquee(messages) {
         const marqueeEl = document.getElementById('marquee-text');
-        if (marqueeEl && messages && messages.length > 0) {
-            // Usa innerHTML per permettere formattazione HTML
-            marqueeEl.innerHTML = messages.join('  •  ') + '  •  ';
+        
+        if (marqueeEl) {
+            // FIX: Calcola il nuovo testo
+            const newText = (messages && messages.length > 0) ? messages.join('  •  ') + '  •  ' : '';
             
-            // --- CALCOLO VELOCITÀ COSTANTE ---
-            // Attende un attimo che il DOM si aggiorni per calcolare la larghezza
-            setTimeout(() => {
-                const containerWidth = marqueeEl.parentElement.offsetWidth;
-                const textWidth = marqueeEl.scrollWidth;
-                
-                // PIXELS AL SECONDO (modifica questo valore per cambiare velocità globale)
-                const speed = 100; 
-                
-                // Calcola durata: (spazio da percorrere) / velocità
-                // Lo spazio totale è la larghezza del testo + la larghezza del contenitore (per attraversarlo tutto)
-                const duration = (textWidth + containerWidth) / speed;
-                
-                // Reset animazione per applicare nuova durata
-                marqueeEl.style.animation = 'none';
-                marqueeEl.offsetHeight; /* trigger reflow */
-                marqueeEl.style.animation = `marquee ${duration}s linear infinite`;
-            }, 100);
+            // FIX: Se il testo è IDENTICO a quello attuale, non fare NULLA.
+            // Questo impedisce il reset dell'animazione quando cambi fermata.
+            if (newText === currentMarqueeText) {
+                return;
+            }
 
-        } else if (marqueeEl) {
-            marqueeEl.innerHTML = '';
+            // Aggiorna la variabile di stato e l'HTML
+            currentMarqueeText = newText;
+            marqueeEl.innerHTML = newText;
+            
+            // Se c'è testo, ricalcola l'animazione. Se è vuoto, svuota.
+            if (newText !== '') {
+                // --- CALCOLO VELOCITÀ COSTANTE ---
+                // Attende un attimo che il DOM si aggiorni per calcolare la larghezza
+                setTimeout(() => {
+                    const containerWidth = marqueeEl.parentElement.offsetWidth;
+                    const textWidth = marqueeEl.scrollWidth;
+                    
+                    // PIXELS AL SECONDO
+                    const speed = 100; 
+                    
+                    // Calcola durata
+                    const duration = (textWidth + containerWidth) / speed;
+                    
+                    // Reset animazione
+                    marqueeEl.style.animation = 'none';
+                    marqueeEl.offsetHeight; /* trigger reflow */
+                    marqueeEl.style.animation = `marquee ${duration}s linear infinite`;
+                }, 100);
+            } else {
+                 marqueeEl.style.animation = 'none';
+            }
         }
     }
 
@@ -2130,7 +2149,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v19 (EDITOR WYSIWYG & LOGO BIANCO)")
+    print("   SERVER HARZAFI v20 (FIX MARQUEE & NUOVI COLORI)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
