@@ -228,7 +228,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (MODIFICATO CON FORMATTAZIONE TESTO) ---
+# --- PANNELLO DI CONTROLLO (MODIFICATO CON EDITOR VISUALE) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -408,7 +408,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             padding: 8px !important;
             flex-shrink: 0;
         }
-        /* STILI PER PULSANTI FORMATTAZIONE */
+        /* STILI PER PULSANTI FORMATTAZIONE E EDITOR */
         .fmt-btn-group {
             display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap;
         }
@@ -421,8 +421,33 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             background: var(--content-background-light);
             color: var(--text-primary);
             width: auto;
+            font-weight: 600;
         }
         .fmt-btn:hover { filter: brightness(1.2); }
+        
+        /* Stile Editor Rich Text */
+        .wysiwyg-editor {
+            width: 100%;
+            min-height: 100px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background-color: var(--content-background-light);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            overflow-y: auto;
+            outline: none;
+            line-height: 1.5;
+            transition: all 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+        .wysiwyg-editor:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.3);
+        }
+        .wysiwyg-editor div {
+            min-height: 20px; /* Assicura che le righe vuote siano visibili */
+        }
     </style>
 </head>
 <body>
@@ -522,16 +547,16 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                     <button id="remove-media-btn" class="btn-danger" style="display: none; width: auto; padding: 8px 15px; font-size: 13px;">Rimuovi Media</button>
                  </div>
                  <div>
-                     <label for="info-messages-input">Messaggi a scorrimento (uno per riga)</label>
+                     <label for="info-messages-editor">Messaggi a scorrimento (Editor Visuale)</label>
                      <div class="fmt-btn-group">
-                        <button type="button" class="fmt-btn" onclick="insertTag('u')"><u>U</u></button>
-                        <button type="button" class="fmt-btn" onclick="insertTag('b')"><b>B</b></button>
-                        <button type="button" class="fmt-btn" style="color: #FF453A;" onclick="insertColor('#FF453A')">Rosso</button>
-                        <button type="button" class="fmt-btn" style="color: #30D158;" onclick="insertColor('#30D158')">Verde</button>
-                        <button type="button" class="fmt-btn" style="color: #FFD60A;" onclick="insertColor('#FFD60A')">Giallo</button>
-                        <button type="button" class="fmt-btn" style="color: #FFFFFF;" onclick="insertColor('#FFFFFF')">Bianco</button>
+                        <button type="button" class="fmt-btn" onmousedown="event.preventDefault(); formatDoc('underline')"><u>U</u></button>
+                        <button type="button" class="fmt-btn" onmousedown="event.preventDefault(); formatDoc('bold')"><b>B</b></button>
+                        <button type="button" class="fmt-btn" style="color: #FF453A;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#FF453A')">Rosso</button>
+                        <button type="button" class="fmt-btn" style="color: #30D158;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#30D158')">Verde</button>
+                        <button type="button" class="fmt-btn" style="color: #FFD60A;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#FFD60A')">Giallo</button>
+                        <button type="button" class="fmt-btn" style="color: #FFFFFF;" onmousedown="event.preventDefault(); formatDoc('foreColor', '#FFFFFF')">Bianco</button>
                      </div>
-                     <textarea id="info-messages-input" placeholder="Benvenuti a bordo..."></textarea>
+                     <div id="info-messages-editor" class="wysiwyg-editor" contenteditable="true"></div>
                      <button id="save-messages-btn" class="btn-primary" style="margin-top: 10px;">Salva Messaggi</button>
                  </div>
                  <div>
@@ -590,29 +615,15 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     </dialog>
 
 <script>
-    // FUNZIONI PER FORMATTAZIONE TESTO MESSAGGI
-    function insertTag(tag) {
-        const ta = document.getElementById('info-messages-input');
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const text = ta.value;
-        const selected = text.substring(start, end);
-        const replacement = `<${tag}>${selected}</${tag}>`;
-        ta.value = text.substring(0, start) + replacement + text.substring(end);
-        ta.focus();
-        ta.selectionStart = start + replacement.length;
-        ta.selectionEnd = start + replacement.length;
-    }
-
-    function insertColor(color) {
-        const ta = document.getElementById('info-messages-input');
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const text = ta.value;
-        const selected = text.substring(start, end);
-        const replacement = `<span style="color:${color};">${selected}</span>`;
-        ta.value = text.substring(0, start) + replacement + text.substring(end);
-        ta.focus();
+    // FUNZIONE DI FORMATTAZIONE VISUALE
+    function formatDoc(cmd, value = null) {
+        if (value) {
+            document.execCommand(cmd, false, value);
+        } else {
+            document.execCommand(cmd);
+        }
+        // Riporta il focus all'editor
+        document.getElementById('info-messages-editor').focus();
     }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -685,7 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusStopName = document.getElementById('status-stop-name');
     const statusStopSubtitle = document.getElementById('status-stop-subtitle');
     const statusProgress = document.getElementById('status-progress');
-    const infoMessagesInput = document.getElementById('info-messages-input');
+    const infoMessagesEditor = document.getElementById('info-messages-editor');
     const saveMessagesBtn = document.getElementById('save-messages-btn');
     const serviceStatusToggle = document.getElementById('service-status-toggle');
     const serviceStatusText = document.getElementById('service-status-text');
@@ -742,16 +753,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadData() { linesData = JSON.parse(localStorage.getItem('busSystem-linesData')) || getDefaultData(); saveData(); }
     function saveData() { localStorage.setItem('busSystem-linesData', JSON.stringify(linesData)); sendFullStateUpdate(); }
+    
     function loadMessages() {
-        const messages = localStorage.getItem('busSystem-infoMessages');
-        infoMessagesInput.value = messages ? JSON.parse(messages).join('\\n') : ["Benvenuti a bordo del servizio Harzafi.", "Si prega di mantenere il corretto distanziamento."].join('\\n');
-        if (!messages) saveMessages(false);
+        const messagesData = localStorage.getItem('busSystem-infoMessages');
+        let messagesArray = [];
+        
+        if (messagesData) {
+            messagesArray = JSON.parse(messagesData);
+        } else {
+            messagesArray = ["Benvenuti a bordo del servizio Harzafi.", "Si prega di mantenere il corretto distanziamento."];
+            saveMessages(false);
+        }
+
+        // Popola l'editor visuale. Ogni messaggio in un div.
+        infoMessagesEditor.innerHTML = messagesArray.map(msg => `<div>${msg}</div>`).join('');
     }
 
     function saveMessages(showFeedback = true) {
-        const messagesArray = infoMessagesInput.value.split('\\n').filter(msg => msg.trim() !== '');
+        // Estrai le linee dall'editor visuale
+        const messagesArray = [];
+        const childNodes = infoMessagesEditor.childNodes;
+        
+        childNodes.forEach(node => {
+            if (node.nodeName === 'DIV' || node.nodeName === 'P') {
+                // Se è un blocco (div o p), prendi il contenuto HTML per mantenere la formattazione
+                if(node.innerHTML.replace(/<br>/g, '').trim() !== '') {
+                     messagesArray.push(node.innerHTML);
+                }
+            } else if (node.nodeName === '#text') {
+                 // Testo semplice non in un div
+                 if(node.textContent.trim() !== '') {
+                     messagesArray.push(node.textContent);
+                 }
+            }
+        });
+
+        // Fallback se l'editor è vuoto o ha struttura strana
+        if (messagesArray.length === 0 && infoMessagesEditor.innerHTML.trim() !== '') {
+            messagesArray.push(infoMessagesEditor.innerHTML);
+        }
+
         localStorage.setItem('busSystem-infoMessages', JSON.stringify(messagesArray));
         sendFullStateUpdate();
+        
         if(showFeedback) {
             const originalText = saveMessagesBtn.textContent;
             saveMessagesBtn.textContent = 'Salvato!'; saveMessagesBtn.classList.add('btn-success'); saveMessagesBtn.classList.remove('btn-primary');
@@ -1210,7 +1254,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO: LOGO COLORE ORIGINALE, NO LOGO SOTTO, VELOCITÀ COSTANTE) ---
+# --- VISUALIZZATORE (MODIFICATO: LOGO BIANCO, VELOCITÀ COSTANTE) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1471,8 +1515,13 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         @keyframes marquee { from { transform: translate(100%, -50%); } to { transform: translate(-100%, -50%); } }
 
-        /* MODIFICA: RIMOSSO FILTRO INVERT PER LOGO COLORE ORIGINALE */
-        .info-bar-right img { height: 45px; flex-shrink: 0; opacity: 1; }
+        /* MODIFICA: LOGO FILTRO BIANCO ATTIVATO */
+        .info-bar-right img { 
+            height: 45px; 
+            flex-shrink: 0; 
+            opacity: 1; 
+            filter: brightness(0) invert(1);
+        }
     </style>
 </head>
 <body>
@@ -1868,13 +1917,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Calcola durata: (spazio da percorrere) / velocità
                 // Lo spazio totale è la larghezza del testo + la larghezza del contenitore (per attraversarlo tutto)
-                // Usiamo solo textWidth se vogliamo che finisca quando l'ultima lettera esce, 
-                // ma per un loop fluido marquee CSS standard, spesso basta regolare in base alla lunghezza.
-                // In questo caso specifico del CSS marquee (translate 100% -> -100%):
-                // La distanza totale è (ContainerWidth + TextWidth) ? No, il transform è relativo all'elemento.
-                
-                // Semplificazione efficace: Durata proporzionale alla larghezza del testo.
-                // Se il testo è lungo 1000px, ci mette 10s. Se è 2000px, ci mette 20s. = Velocità costante.
                 const duration = (textWidth + containerWidth) / speed;
                 
                 // Reset animazione per applicare nuova durata
@@ -2088,7 +2130,7 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v18 (FORMATTAZIONE TESTO E LOGO FIX)")
+    print("   SERVER HARZAFI v19 (EDITOR WYSIWYG & LOGO BIANCO)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
