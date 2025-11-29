@@ -1,17 +1,31 @@
 import sys
 import socket
-import re 
-import os 
-import tempfile 
+import re
+import os
+import tempfile
+import mimetypes
+import base64
+from io import BytesIO
 from functools import wraps
 from datetime import datetime, timedelta
-from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash, send_file
+from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash, send_file, send_from_directory
 from flask_socketio import SocketIO
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField
 from wtforms.validators import DataRequired
+
+# Import per metadati audio
+try:
+    import mutagen
+    from mutagen.mp3 import MP3
+    from mutagen.id3 import ID3, APIC
+except ImportError:
+    print("ATTENZIONE: 'mutagen' non installato. I metadati audio (titolo, artista) non funzioneranno.")
+    print("Esegui: pip install mutagen")
+    mutagen = None
 
 # -------------------------------------------------------------------
 # SEZIONE CONFIGURAZIONE SICUREZZA POTENZIATA E LOGIN
@@ -51,6 +65,14 @@ class LoginForm(FlaskForm):
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY_FLASK
 app.config['WTF_CSRF_SECRET_KEY'] = SECRET_KEY_FLASK
+
+# Configurazione cartella Uploads
+# I file verranno salvati in una cartella 'uploads' accanto a app.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOADS_FOLDER = os.path.join(BASE_DIR, 'uploads')
+os.makedirs(UPLOADS_FOLDER, exist_ok=True)
+app.config['UPLOADS_FOLDER'] = UPLOADS_FOLDER
+
 socketio = SocketIO(app)
 
 login_manager = LoginManager()
@@ -84,6 +106,33 @@ def get_local_ip():
             s.close()
     return IP
 
+# --- Funzione Helper per Metadati Audio ---
+def get_media_metadata(file_path, mimetype):
+    metadata = {'title': None, 'artist': None, 'album_art': None}
+    if not mutagen or 'audio' not in mimetype:
+        return metadata
+
+    try:
+        if mimetype == 'audio/mpeg':
+            audio = MP3(file_path, ID3=ID3)
+            # Titolo
+            if 'TIT2' in audio:
+                metadata['title'] = audio['TIT2'].text[0]
+            # Artista
+            if 'TPE1' in audio:
+                metadata['artist'] = audio['TPE1'].text[0]
+            # Copertina
+            if 'APIC:' in audio:
+                apic = audio['APIC:']
+                mime = apic.mime
+                data = base64.b64encode(apic.data).decode('utf-8')
+                metadata['album_art'] = f"data:{mime};base64,{data}"
+        # Aggiungere qui altri tipi se necessario (es. m4a, flac)
+    except Exception as e:
+        print(f"Errore lettura metadati Mutagen: {e}")
+        
+    return metadata
+
 # -------------------------------------------------------------------
 # 2. STATO GLOBALE DELL'APPLICAZIONE
 # -------------------------------------------------------------------
@@ -91,20 +140,23 @@ current_app_state = {
     "linesData": {},
     "currentLineKey": None,
     "currentStopIndex": 0,
-    "mediaSource": None,
+    "mediaSource": None,        # 'server' o 'embed'
     "embedCode": None,
-    "videoName": None,
+    "mediaName": None,          # Nome del file (es. "video.mp4" o "foto.jpg")
+    "mediaType": None,          # 'video', 'image', 'audio'
+    "mediaMetadata": {},        # {'title': '...', 'artist': '...', 'album_art': '...'}
     "mediaLastUpdated": None,
     "volumeLevel": "1.0",
     "playbackState": "playing",
     "seekAction": None,
     "infoMessages": [],
     "serviceStatus": "online", 
-    "videoNotAvailable": False, 
+    "mediaNotAvailable": False, # Sostituisce 'videoNotAvailable'
     "announcement": None,
     "stopRequested": None
 }
-current_video_file = {'path': None, 'mimetype': None, 'name': None}
+# Stato del file locale. NON inviato ai client.
+current_media_file = {'path': None, 'mimetype': None, 'name': None}
 
 # -------------------------------------------------------------------
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
@@ -228,7 +280,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (AGGIUNTI COLORI NUOVI) ---
+# --- PANNELLO DI CONTROLLO (MODIFICATO PER MEDIA) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -534,15 +586,15 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         </section>
         <section class="control-section">
             <h2>Gestione Media e Messaggi</h2>
-             <p class="subtitle">Carica contenuti video, controlla la riproduzione o imposta messaggi a scorrimento.</p>
+             <p class="subtitle">Carica video, foto o audio, controlla la riproduzione o imposta messaggi a scorrimento.</p>
              <div class="grid">
                  <div>
                     <label for="embed-code-input">Codice Embed (iframe)</label>
                     <textarea id="embed-code-input" placeholder="Incolla qui il codice <iframe>..."></textarea>
                     <button id="import-embed-btn" class="btn-secondary" style="margin-top: 10px;">Imposta da Embed</button>
                     <hr style="border-color: var(--border-color); margin: 20px 0;">
-                    <input type="file" id="video-importer" accept="video/*" style="display: none;">
-                    <button id="import-video-btn" class="btn-secondary">Importa Video Locale</button>
+                    <input type="file" id="media-importer" accept="video/*,image/*,audio/*" style="display: none;">
+                    <button id="import-media-btn" class="btn-secondary">Importa Media Locale (Video/Foto/Audio)</button>
                     <p id="media-upload-status" style="font-size: 14px; color: var(--text-secondary); margin-top: 15px;">Nessun media caricato.</p>
                     <button id="remove-media-btn" class="btn-danger" style="display: none; width: auto; padding: 8px 15px; font-size: 13px;">Rimuovi Media</button>
                  </div>
@@ -576,11 +628,11 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                     </div>
                  </div>
                  <div>
-                    <label>Modalità "Video Non Disponibile"</label>
+                    <label>Modalità "Media Non Disponibile"</label>
                      <div style="display: flex; align-items: center; justify-content: space-between; background-color: var(--content-background-light); padding: 10px 15px; border-radius: 12px;">
-                        <span id="video-not-available-status-text" style="font-weight: 600;">Disattivato</span>
+                        <span id="media-not-available-status-text" style="font-weight: 600;">Disattivato</span>
                         <label class="toggle-switch">
-                            <input type="checkbox" id="video-not-available-toggle">
+                            <input type="checkbox" id="media-not-available-toggle">
                             <span class="slider"></span>
                         </label>
                     </div>
@@ -659,14 +711,16 @@ document.addEventListener('DOMContentLoaded', () => {
             linesData: linesData, currentLineKey: currentLineKey, currentStopIndex: currentStopIndex,
             mediaSource: localStorage.getItem('busSystem-mediaSource'),
             embedCode: localStorage.getItem('busSystem-embedCode'),
-            videoName: localStorage.getItem('busSystem-videoName'),
+            mediaName: localStorage.getItem('busSystem-mediaName'),
+            mediaType: localStorage.getItem('busSystem-mediaType'),
+            mediaMetadata: JSON.parse(localStorage.getItem('busSystem-mediaMetadata') || '{}'),
             mediaLastUpdated: localStorage.getItem('busSystem-mediaLastUpdated'),
             volumeLevel: localStorage.getItem('busSystem-volumeLevel') || '1.0',
             playbackState: localStorage.getItem('busSystem-playbackState') || 'playing',
             seekAction: JSON.parse(localStorage.getItem('busSystem-seekAction') || 'null'),
             infoMessages: JSON.parse(localStorage.getItem('busSystem-infoMessages') || '[]'),
             serviceStatus: serviceStatus,
-            videoNotAvailable: videoNotAvailable,
+            mediaNotAvailable: mediaNotAvailable,
             announcement: JSON.parse(localStorage.getItem('busSystem-playAnnouncement') || 'null'),
             stopRequested: JSON.parse(localStorage.getItem('busSystem-stopRequested') || 'null')
         };
@@ -676,8 +730,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.seekAction) localStorage.removeItem('busSystem-seekAction');
     }
 
-    const importVideoBtn = document.getElementById('import-video-btn');
-    const videoImporter = document.getElementById('video-importer');
+    const importMediaBtn = document.getElementById('import-media-btn');
+    const mediaImporter = document.getElementById('media-importer');
     const importEmbedBtn = document.getElementById('import-embed-btn');
     const embedCodeInput = document.getElementById('embed-code-input');
     const removeMediaBtn = document.getElementById('remove-media-btn');
@@ -706,8 +760,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceStatusText = document.getElementById('service-status-text');
     const resetDataBtn = document.getElementById('reset-data-btn');
     const bookedBtn = document.getElementById('booked-btn');
-    const videoNotAvailableToggle = document.getElementById('video-not-available-toggle');
-    const videoNotAvailableStatusText = document.getElementById('video-not-available-status-text');
+    const mediaNotAvailableToggle = document.getElementById('media-not-available-toggle');
+    const mediaNotAvailableStatusText = document.getElementById('media-not-available-status-text');
     const mediaControlsContainer = document.getElementById('media-controls-container');
     const playPauseBtn = document.getElementById('play-pause-btn');
     const volumeSlider = document.getElementById('volume-slider');
@@ -716,7 +770,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const seekFwdBtn = document.getElementById('seek-fwd-btn');
 
     let linesData = {}, currentLineKey = null, currentStopIndex = 0, serviceStatus = 'online';
-    let videoNotAvailable = false;
+    let mediaNotAvailable = false;
     
     const iconMicRed = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
     const iconMicGreen = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
@@ -809,16 +863,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadMediaStatus() {
         const mediaSource = localStorage.getItem('busSystem-mediaSource');
-        const videoName = localStorage.getItem('busSystem-videoName');
-        const hasMedia = mediaSource === 'embed' || (mediaSource === 'server' && videoName);
+        const mediaName = localStorage.getItem('busSystem-mediaName');
+        const mediaType = localStorage.getItem('busSystem-mediaType');
+        const hasMedia = mediaSource === 'embed' || (mediaSource === 'server' && mediaName);
         
-        mediaControlsContainer.classList.toggle('disabled', !hasMedia);
+        mediaControlsContainer.classList.toggle('disabled', !hasMedia || mediaType === 'image');
 
         if (mediaSource === 'embed') {
             mediaUploadStatusText.textContent = `Media da Embed attivo.`;
             removeMediaBtn.style.display = 'inline-block';
-        } else if (mediaSource === 'server' && videoName) {
-            mediaUploadStatusText.textContent = `Video locale: ${videoName}`;
+        } else if (mediaSource === 'server' && mediaName) {
+            let typeLabel = "Media";
+            if (mediaType === 'video') typeLabel = 'Video';
+            if (mediaType === 'image') typeLabel = 'Immagine';
+            if (mediaType === 'audio') typeLabel = 'Audio';
+            mediaUploadStatusText.textContent = `${typeLabel} locale: ${mediaName}`;
             removeMediaBtn.style.display = 'inline-block';
         } else {
             mediaUploadStatusText.textContent = 'Nessun media caricato.';
@@ -826,16 +885,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function handleLocalVideoUpload(event) {
+    async function handleLocalMediaUpload(event) {
         const file = event.target.files[0]; if (!file) return;
-        importVideoBtn.disabled = true; importVideoBtn.textContent = 'CARICAMENTO...';
-        const formData = new FormData(); formData.append('video', file);
-        const response = await fetchAuthenticated('/upload-video', { method: 'POST', body: formData });
+        importMediaBtn.disabled = true; importMediaBtn.textContent = 'CARICAMENTO...';
+        const formData = new FormData(); formData.append('media', file);
+        const response = await fetchAuthenticated('/upload-media', { method: 'POST', body: formData });
         
         if (response) {
             if (response.ok) {
+                const data = await response.json();
                 localStorage.setItem('busSystem-mediaSource', 'server'); 
-                localStorage.setItem('busSystem-videoName', file.name);
+                localStorage.setItem('busSystem-mediaName', data.filename);
+                localStorage.setItem('busSystem-mediaType', data.mediaType);
+                localStorage.setItem('busSystem-mediaMetadata', JSON.stringify(data.metadata));
                 localStorage.removeItem('busSystem-embedCode');
                 localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
                 loadMediaStatus(); 
@@ -845,32 +907,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     const errorData = await response.json();
                     alert('Errore caricamento: ' + (errorData.error || 'Errore server sconosciuto'));
                 } catch(e) {
-                    alert('Errore grave durante il caricamento del video.');
+                    alert('Errore grave durante il caricamento del media.');
                 }
             }
         }
         
-        importVideoBtn.disabled = false; importVideoBtn.textContent = 'Importa Video Locale';
-        videoImporter.value = '';
+        importMediaBtn.disabled = false; importMediaBtn.textContent = 'Importa Media Locale (Video/Foto/Audio)';
+        mediaImporter.value = '';
     }
+    
     async function handleEmbedImport() {
         const rawCode = embedCodeInput.value.trim();
         if (!rawCode.includes('<iframe')) { alert('Codice <iframe> non valido.'); return; }
-        await fetchAuthenticated('/clear-video', { method: 'POST' });
+        await fetchAuthenticated('/clear-media', { method: 'POST' });
         const tempDiv = document.createElement('div'); tempDiv.innerHTML = rawCode;
         const iframe = tempDiv.querySelector('iframe'); if (!iframe) { alert('Tag <iframe> non trovato.'); return; }
         iframe.setAttribute('width', '100%'); iframe.setAttribute('height', '100%');
         iframe.setAttribute('style', 'position:absolute; top:0; left:0; width:100%; height:100%; border:0;');
         localStorage.setItem('busSystem-mediaSource', 'embed');
+        localStorage.setItem('busSystem-mediaType', 'embed'); // Tipo speciale per embed
         localStorage.setItem('busSystem-embedCode', iframe.outerHTML);
-        localStorage.removeItem('busSystem-videoName');
+        localStorage.removeItem('busSystem-mediaName');
+        localStorage.removeItem('busSystem-mediaMetadata');
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
         loadMediaStatus(); embedCodeInput.value = ''; sendFullStateUpdate();
     }
+    
     async function removeMedia() {
         if (!confirm('Rimuovere il media attuale?')) return;
-        await fetchAuthenticated('/clear-video', { method: 'POST' });
-        localStorage.removeItem('busSystem-mediaSource'); localStorage.removeItem('busSystem-videoName');
+        await fetchAuthenticated('/clear-media', { method: 'POST' });
+        localStorage.removeItem('busSystem-mediaSource'); 
+        localStorage.removeItem('busSystem-mediaName');
+        localStorage.removeItem('busSystem-mediaType');
+        localStorage.removeItem('busSystem-mediaMetadata');
         localStorage.removeItem('busSystem-embedCode');
         localStorage.setItem('busSystem-mediaLastUpdated', Date.now());
         loadMediaStatus(); sendFullStateUpdate();
@@ -884,15 +953,15 @@ document.addEventListener('DOMContentLoaded', () => {
         serviceStatusToggle.checked = isOnline;
     }
 
-    function saveVideoNotAvailableStatus() {
-        localStorage.setItem('busSystem-videoNotAvailable', videoNotAvailable);
+    function saveMediaNotAvailableStatus() {
+        localStorage.setItem('busSystem-mediaNotAvailable', mediaNotAvailable);
         sendFullStateUpdate();
     }
-    function renderVideoNotAvailableStatus() {
-        const isNotAvailable = videoNotAvailable === true;
-        videoNotAvailableStatusText.textContent = isNotAvailable ? 'Attivato' : 'Disattivato';
-        videoNotAvailableStatusText.style.color = isNotAvailable ? 'var(--danger)' : 'var(--text-primary)';
-        videoNotAvailableToggle.checked = isNotAvailable;
+    function renderMediaNotAvailableStatus() {
+        const isNotAvailable = mediaNotAvailable === true;
+        mediaNotAvailableStatusText.textContent = isNotAvailable ? 'Attivato' : 'Disattivato';
+        mediaNotAvailableStatusText.style.color = isNotAvailable ? 'var(--danger)' : 'var(--text-primary)';
+        mediaNotAvailableToggle.checked = isNotAvailable;
     }
 
     function renderAll() { renderNavigationPanel(); renderManagementPanel(); renderStatusDisplay(); }
@@ -994,11 +1063,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupPreviewControls() {
         const previewIframe = document.getElementById('viewer-iframe-preview');
         const togglePlaybackBtn = document.getElementById('toggle-preview-playback-btn');
-        let videoInIframe = null;
+        let mediaInIframe = null; // Può essere <video> o <audio>
 
         const updateButtonState = () => {
-            if (videoInIframe) {
-                if (videoInIframe.paused) {
+            if (mediaInIframe) {
+                if (mediaInIframe.paused) {
                     togglePlaybackBtn.textContent = '▶ Riproduci in anteprima';
                 } else {
                     togglePlaybackBtn.textContent = '❚❚ Pausa in anteprima';
@@ -1009,7 +1078,8 @@ document.addEventListener('DOMContentLoaded', () => {
         previewIframe.addEventListener('load', () => {
             try {
                 const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
-                videoInIframe = iframeDoc.getElementById('ad-video');
+                // Cerca sia video che audio
+                mediaInIframe = iframeDoc.getElementById('ad-video') || iframeDoc.getElementById('ad-audio');
                 
                 const announcementAudio = iframeDoc.getElementById('announcement-sound');
                 if (announcementAudio) announcementAudio.muted = true;
@@ -1018,22 +1088,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const stopAudio = iframeDoc.getElementById('stop-announcement-sound');
                 if (stopAudio) stopAudio.muted = true;
                 
-                if (videoInIframe) {
-                    videoInIframe.muted = true;
-                    videoInIframe.pause();
+                if (mediaInIframe) {
+                    mediaInIframe.muted = true;
+                    mediaInIframe.pause();
                     
                     const videoBgEl = iframeDoc.getElementById('ad-video-bg');
                     if (videoBgEl) videoBgEl.muted = true;
 
-                    videoInIframe.addEventListener('play', updateButtonState);
-                    videoInIframe.addEventListener('pause', updateButtonState);
+                    mediaInIframe.addEventListener('play', updateButtonState);
+                    mediaInIframe.addEventListener('pause', updateButtonState);
 
                     togglePlaybackBtn.disabled = false;
                     updateButtonState();
                 } else {
                     if (iframeDoc.querySelector('.placeholder-image')) {
                         togglePlaybackBtn.disabled = true;
-                        togglePlaybackBtn.textContent = 'Nessun video da riprodurre';
+                        togglePlaybackBtn.textContent = 'Nessun media riproducibile';
                     }
                 }
 
@@ -1045,11 +1115,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         togglePlaybackBtn.addEventListener('click', () => {
-            if (videoInIframe && !togglePlaybackBtn.disabled) {
-                if (videoInIframe.paused) {
-                    videoInIframe.play();
+            if (mediaInIframe && !togglePlaybackBtn.disabled) {
+                if (mediaInIframe.paused) {
+                    mediaInIframe.play();
                 } else {
-                    videoInIframe.pause();
+                    mediaInIframe.pause();
                 }
             }
         });
@@ -1066,9 +1136,9 @@ document.addEventListener('DOMContentLoaded', () => {
         saveServiceStatus();
         renderServiceStatus();
         
-        videoNotAvailable = localStorage.getItem('busSystem-videoNotAvailable') === 'true';
-        saveVideoNotAvailableStatus();
-        renderVideoNotAvailableStatus();
+        mediaNotAvailable = localStorage.getItem('busSystem-mediaNotAvailable') === 'true';
+        saveMediaNotAvailableStatus();
+        renderMediaNotAvailableStatus();
         
         currentLineKey = localStorage.getItem('busSystem-currentLine');
         currentStopIndex = parseInt(localStorage.getItem('busSystem-currentStopIndex'), 10) || 0;
@@ -1089,10 +1159,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
     
-    videoNotAvailableToggle.addEventListener('change', () => {
-        videoNotAvailable = videoNotAvailableToggle.checked;
-        saveVideoNotAvailableStatus();
-        renderVideoNotAvailableStatus();
+    mediaNotAvailableToggle.addEventListener('change', () => {
+        mediaNotAvailable = mediaNotAvailableToggle.checked;
+        saveMediaNotAvailableStatus();
+        renderMediaNotAvailableStatus();
     });
 
     bookedBtn.addEventListener('click', () => {
@@ -1112,8 +1182,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 2500); 
     });
 
-    importVideoBtn.addEventListener('click', () => videoImporter.click());
-    videoImporter.addEventListener('change', handleLocalVideoUpload);
+    importMediaBtn.addEventListener('click', () => mediaImporter.click());
+    mediaImporter.addEventListener('change', handleLocalMediaUpload);
     importEmbedBtn.addEventListener('click', handleEmbedImport);
     removeMediaBtn.addEventListener('click', removeMedia);
     addNewLineBtn.addEventListener('click', () => { 
@@ -1258,7 +1328,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO: LOGICA MARQUEE FIXATA) ---
+# --- VISUALIZZATORE (MODIFICATO: LOGICA MARQUEE FIXATA + MUSIC PLAYER) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1269,6 +1339,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         :root {
@@ -1524,6 +1595,98 @@ VISUALIZZATORE_COMPLETO_HTML = """
             opacity: 1; 
             filter: brightness(0) invert(1);
         }
+        
+        /* --- STILI MUSIC PLAYER --- */
+        .music-player-wrapper {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10;
+            background: rgba(0,0,0,0.2);
+            border-radius: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+        .music-now-playing {
+            font-size: 16px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: absolute;
+            top: 25px;
+        }
+        .music-album-art {
+            width: 50%;
+            padding-top: 50%; /* 1:1 Aspect Ratio */
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background-color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .music-album-art img {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        .music-album-art .music-art-placeholder {
+            width: 40%;
+            height: 40%;
+            color: rgba(255,255,255,0.5);
+        }
+        .music-info {
+            text-align: center;
+            margin-top: 25px;
+            width: 100%;
+        }
+        .music-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .music-artist {
+            font-size: 18px;
+            font-weight: 500;
+            color: rgba(255,255,255,0.8);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .music-progress-bar-container {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            margin-top: 25px;
+            overflow: hidden;
+        }
+        .music-progress-bar {
+            width: 0%;
+            height: 100%;
+            background: white;
+            border-radius: 3px;
+            transition: width 0.1s linear;
+        }
+        .music-time-container {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 500;
+            color: rgba(255,255,255,0.7);
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -1579,12 +1742,12 @@ VISUALIZZATORE_COMPLETO_HTML = """
             <div class="error-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/></svg>
             </div>
-            <h2>Errore Caricamento</h2>
-            <p>Si è verificato un problema durante il caricamento del video. Il contenuto potrebbe essere danneggiato o non supportato.</p>
+            <h2>Errore Caricamento Media</h2>
+            <p>Si è verificato un problema durante il caricamento del media. Il contenuto potrebbe essere danneggiato o non supportato.</p>
             <button id="close-error-modal-btn">Chiudi</button>
         </div>
     </div>
-    <script>
+<script>
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
@@ -1593,7 +1756,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
     const videoErrorOverlay = document.getElementById('video-error-overlay');
 
-    const IMG_DEFAULT = 'https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg';
+    const IMG_DEFAULT = 'https://i.ibb.co/sK28vN6/Pronto-per-eseguire-contenuti-multimediali.jpg';
     const IMG_NOT_AVAILABLE = 'https://i.ibb.co/Wv3zjPnG/Al-momento-non-disponibile-eseguire-contenuti.jpg';
     const IMG_LOADING = 'https://i.ibb.co/WNL6KW51/Carico-Attendi.jpg';
 
@@ -1623,8 +1786,6 @@ document.addEventListener('DOMContentLoaded', () => {
             runMarqueeRound(newText);
         } else {
             // Se sta già girando, metti in coda il nuovo testo.
-            // Il ciclo attuale finirà con il vecchio testo, aspetterà 1 secondo,
-            // e poi prenderà questo valore dalla coda.
             nextMessageQueue = newText;
         }
     }
@@ -1644,76 +1805,72 @@ document.addEventListener('DOMContentLoaded', () => {
         // Calcola distanze e velocità
         const containerWidth = marqueeEl.parentElement.offsetWidth;
         const textWidth = marqueeEl.scrollWidth;
-        // Velocità in pixel al secondo
         const speedPxPerSec = 150; 
         
-        // Posiziona il testo completamente a destra (fuori schermo)
         marqueeEl.style.transition = 'none';
         marqueeEl.style.transform = `translateX(${containerWidth}px)`;
-
-        // Forza un reflow per applicare la posizione iniziale
         marqueeEl.offsetHeight;
 
-        // Calcola durata: (distanza totale) / velocità
-        // Distanza totale = larghezza contenitore (entrata) + larghezza testo (uscita)
         const duration = (containerWidth + textWidth) / speedPxPerSec;
 
-        // Avvia l'animazione verso sinistra (fuori schermo)
         marqueeEl.style.transition = `transform ${duration}s linear`;
         marqueeEl.style.transform = `translateX(-${textWidth}px)`;
 
-        // Quando l'animazione finisce...
         const onAnimationEnd = () => {
             marqueeEl.removeEventListener('transitionend', onAnimationEnd);
-            
-            // LA BARRA ORA È BIANCA (VUOTA). 
-            // ASPETTA 1 SECONDO ESATTO PRIMA DI RIPARTIRE.
             setTimeout(() => {
-                // Controlla se c'è un messaggio nuovo in coda (l'admin ha cambiato testo)
                 let nextText = textToPlay;
                 if (nextMessageQueue !== null) {
                     nextText = nextMessageQueue;
-                    nextMessageQueue = null; // Svuota la coda
+                    nextMessageQueue = null; 
                 }
-                
-                // Riavvia il ciclo
                 runMarqueeRound(nextText);
             }, 1000);
         };
-
         marqueeEl.addEventListener('transitionend', onAnimationEnd);
     }
     // --- FINE GESTIONE MARQUEE ---
     
+    // --- HELPER FORMATTAZIONE ORARIO ---
+    function formatTime(totalSeconds) {
+        if (isNaN(totalSeconds) || totalSeconds < 0) return "0:00";
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = Math.floor(totalSeconds % 60);
+        return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    }
+
     function applyMediaPlaybackState(state) {
         const videoEl = document.getElementById('ad-video');
+        const audioEl = document.getElementById('ad-audio');
+        const mediaEl = videoEl || audioEl;
         const videoBgEl = document.getElementById('ad-video-bg');
         
-        if (!videoEl && !videoPlayerContainer.querySelector('iframe')) return;
-        if (videoPlayerContainer.querySelector('iframe')) return;
+        if (!mediaEl && !videoPlayerContainer.querySelector('iframe')) return;
+        if (videoPlayerContainer.querySelector('iframe')) return; // Non controlliamo embed
 
         const newVolume = parseFloat(state.volumeLevel);
-        if (videoEl.volume !== newVolume) { videoEl.volume = newVolume; }
+        if (mediaEl.volume !== newVolume) { mediaEl.volume = newVolume; }
 
         if (state.playbackState === 'playing') {
-            if (videoEl.paused) videoEl.play().catch(e => {});
+            if (mediaEl.paused) mediaEl.play().catch(e => {});
             if (videoBgEl && videoBgEl.paused) videoBgEl.play().catch(e => {});
         } else if (state.playbackState === 'paused') {
-            if (!videoEl.paused) videoEl.pause();
+            if (!mediaEl.paused) mediaEl.pause();
             if (videoBgEl && !videoBgEl.paused) videoBgEl.pause();
         }
         
         if (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0)) {
-            const newTime = videoEl.currentTime + state.seekAction.value;
-            const finalTime = Math.max(0, Math.min(newTime, isNaN(videoEl.duration) ? Infinity : videoEl.duration));
-            videoEl.currentTime = finalTime;
+            const newTime = mediaEl.currentTime + state.seekAction.value;
+            const duration = isNaN(mediaEl.duration) ? Infinity : mediaEl.duration;
+            const finalTime = Math.max(0, Math.min(newTime, duration));
+            mediaEl.currentTime = finalTime;
             if (videoBgEl) {
                 videoBgEl.currentTime = finalTime;
             }
         }
     }
 
-    function showMediaContent(html, stateToApply) {
+    function showMediaContent(html, stateToApply, mediaType) {
         if (mediaTimeout) clearTimeout(mediaTimeout);
         
         videoPlayerContainer.classList.remove('box-enter-animation');
@@ -1724,75 +1881,135 @@ document.addEventListener('DOMContentLoaded', () => {
             videoPlayerContainer.classList.remove('box-exit-animation');
             videoPlayerContainer.classList.add('box-enter-animation');
             
-            const videoEl = document.getElementById('ad-video');
-            if (videoEl) {
-                videoEl.addEventListener('ended', () => {
-                    videoEl.currentTime = 0;
-                    videoEl.play().catch(e => console.error("Errore riavvio loop:", e));
-                });
-                
-                videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
-                
-                videoEl.onerror = () => {
-                    console.error("Errore caricamento video locale.");
-                    loadMedia('error', stateToApply); 
-                };
+            // --- Logica post-caricamento ---
+            
+            if (mediaType === 'video') {
+                const videoEl = document.getElementById('ad-video');
+                if (videoEl) {
+                    videoEl.addEventListener('ended', () => { videoEl.currentTime = 0; videoEl.play().catch(e => {}); });
+                    videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
+                    videoEl.onerror = () => { console.error("Errore caricamento video."); loadMedia('error', stateToApply); };
+                }
             }
+            
+            if (mediaType === 'audio') {
+                const audioEl = document.getElementById('ad-audio');
+                const progress = document.getElementById('music-progress');
+                const currentTimeEl = document.getElementById('music-current-time');
+                const remainingTimeEl = document.getElementById('music-remaining-time');
+                
+                if (audioEl) {
+                    audioEl.onloadedmetadata = () => {
+                        if (remainingTimeEl) remainingTimeEl.textContent = '-' + formatTime(audioEl.duration);
+                    };
+                    audioEl.ontimeupdate = () => {
+                        if(isNaN(audioEl.duration)) return;
+                        const percent = (audioEl.currentTime / audioEl.duration) * 100;
+                        if (progress) progress.style.width = percent + '%';
+                        if (currentTimeEl) currentTimeEl.textContent = formatTime(audioEl.currentTime);
+                        if (remainingTimeEl) remainingTimeEl.textContent = '-' + formatTime(audioEl.duration - audioEl.currentTime);
+                    };
+                    audioEl.addEventListener('ended', () => { audioEl.currentTime = 0; audioEl.play().catch(e => {}); });
+                    audioEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
+                    audioEl.onerror = () => { console.error("Errore caricamento audio."); loadMedia('error', stateToApply); };
+                }
+            }
+
         }, 600);
     }
 
-    function loadMedia(targetState, state) {
-        if (currentMediaState === targetState && targetState !== 'loading') {
+    function loadMedia(targetMediaType, state) {
+        if (currentMediaState === targetMediaType && targetMediaType !== 'loading') {
             return;
         }
-        currentMediaState = targetState;
+        if (mediaTimeout) clearTimeout(mediaTimeout);
+        
+        currentMediaState = targetMediaType;
         let contentHtml = '';
+        const mediaUrl = `/stream-media?t=${state.mediaLastUpdated}`;
 
-        switch (targetState) {
+        if (state.mediaNotAvailable) {
+            targetMediaType = 'not_available';
+            currentMediaState = 'not_available';
+        }
+
+        switch (targetMediaType) {
             case 'not_available':
                 contentHtml = `<img src="${IMG_NOT_AVAILABLE}" class="placeholder-image" alt="Contenuto non disponibile">`;
-                showMediaContent(contentHtml, state);
+                showMediaContent(contentHtml, state, 'image');
                 break;
             
-            case 'default':
-                contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
-                showMediaContent(contentHtml, state);
-                break;
-
             case 'loading':
                 contentHtml = `<img src="${IMG_LOADING}" class="placeholder-image" alt="Caricamento in corso...">`;
-                showMediaContent(contentHtml, state);
+                showMediaContent(contentHtml, state, 'image');
                 
                 mediaTimeout = setTimeout(() => {
                     if (currentMediaState === 'loading') {
-                        const nextState = state.mediaSource === 'server' ? 'server' : 'embed';
-                        loadMedia(nextState, state);
+                        loadMedia(state.mediaType || 'default', state);
                     }
                 }, 1500);
                 break;
                 
-            case 'server':
-                const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
+            case 'video':
                 contentHtml = `
                     <div class="video-background-blur">
-                        <video id="ad-video-bg" loop playsinline muted src="${videoUrl}"></video>
+                        <video id="ad-video-bg" loop playsinline muted src="${mediaUrl}"></video>
                     </div>
-                    <video id="ad-video" loop playsinline src="${videoUrl}"></video>`;
-                showMediaContent(contentHtml, state);
+                    <video id="ad-video" loop playsinline src="${mediaUrl}"></video>`;
+                showMediaContent(contentHtml, state, 'video');
+                break;
+
+            case 'image':
+                contentHtml = `<img src="${mediaUrl}" class="placeholder-image" alt="${state.mediaName || 'Immagine caricata'}">`;
+                showMediaContent(contentHtml, state, 'image');
+                break;
+
+            case 'audio':
+                const metadata = state.mediaMetadata || {};
+                const title = metadata.title || state.mediaName || 'Traccia Sconosciuta';
+                const artist = metadata.artist || 'Artista Sconosciuto';
+                let artHtml;
+                if (metadata.album_art) {
+                    artHtml = `<img src="${metadata.album_art}" alt="Copertina album">`;
+                } else {
+                    artHtml = `<svg class="music-art-placeholder" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6zm-2 16c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>`;
+                }
+
+                contentHtml = `
+                    <div class="music-player-wrapper">
+                        <div class="music-now-playing">IN RIPRODUZIONE</div>
+                        <div class="music-album-art">${artHtml}</div>
+                        <div class="music-info">
+                            <div class="music-title">${title}</div>
+                            <div class="music-artist">${artist}</div>
+                        </div>
+                        <div class="music-progress-bar-container">
+                            <div id="music-progress" class="music-progress-bar"></div>
+                        </div>
+                        <div class="music-time-container">
+                            <span id="music-current-time">0:00</span>
+                            <span id="music-remaining-time">-:--</span>
+                        </div>
+                        <audio id="ad-audio" loop playsinline src="${mediaUrl}" style="display:none;"></audio>
+                    </div>`;
+                showMediaContent(contentHtml, state, 'audio');
                 break;
                 
             case 'embed':
                 contentHtml = state.embedCode;
-                showMediaContent(contentHtml, state);
+                showMediaContent(contentHtml, state, 'embed');
                 break;
                 
             case 'error':
-                contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
-                showMediaContent(contentHtml, state);
-                if (videoErrorOverlay) {
-                    videoErrorOverlay.classList.add('visible');
-                }
-                if (mediaTimeout) clearTimeout(mediaTimeout);
+                contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti multimediali">`;
+                showMediaContent(contentHtml, state, 'image');
+                if (videoErrorOverlay) videoErrorOverlay.classList.add('visible');
+                break;
+
+            case 'default':
+            default:
+                contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti multimediali">`;
+                showMediaContent(contentHtml, state, 'image');
                 break;
         }
     }
@@ -1807,19 +2024,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
     function playAnnouncement() {
-        const videoEl = document.getElementById('ad-video');
+        const mediaEl = document.getElementById('ad-video') || document.getElementById('ad-audio');
         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
         
-        if (videoEl && !videoEl.muted) {
-            videoEl.volume = Math.min(originalVolume, 0.15);
+        if (mediaEl && !mediaEl.muted) {
+            mediaEl.volume = Math.min(originalVolume, 0.15);
         }
         
         announcementSound.currentTime = 0;
         announcementSound.play().catch(e => console.error("Errore riproduzione annuncio:", e));
         
         announcementSound.onended = () => {
-            if (videoEl) {
-                videoEl.volume = originalVolume;
+            if (mediaEl) {
+                mediaEl.volume = originalVolume;
             }
         };
     }
@@ -1888,17 +2105,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         stopAnnouncementSound.src = newStop.audio;
                         stopAnnouncementSound.currentTime = 0;
                         
-                        const videoEl = document.getElementById('ad-video');
+                        const mediaEl = document.getElementById('ad-video') || document.getElementById('ad-audio');
                         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
                         
-                        if (videoEl && !videoEl.muted) {
-                            videoEl.volume = Math.min(originalVolume, 0.15);
+                        if (mediaEl && !mediaEl.muted) {
+                            mediaEl.volume = Math.min(originalVolume, 0.15);
                         }
                         
                         stopAnnouncementSound.play().catch(e => console.error("Errore riproduzione audio fermata:", e));
                         
                         stopAnnouncementSound.onended = () => {
-                            if (videoEl) videoEl.volume = originalVolume;
+                            if (mediaEl) mediaEl.volume = originalVolume;
                         };
                     }
 
@@ -1928,36 +2145,36 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
-        const notAvailableChanged = state.videoNotAvailable !== lastKnownState.videoNotAvailable;
+        // --- GESTIONE MEDIA ---
+        let targetMediaType = currentMediaState;
+        let forceReload = false;
+        
+        const mediaFileChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
+        const notAvailableToggledOn = state.mediaNotAvailable && !lastKnownState.mediaNotAvailable;
+        const notAvailableToggledOff = !state.mediaNotAvailable && lastKnownState.mediaNotAvailable;
+        const isInitialMediaLoad = currentMediaState === null;
+        
         const playbackChanged = state.playbackState !== lastKnownState.playbackState ||
                                   state.volumeLevel !== lastKnownState.volumeLevel ||
                                   (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0));
 
-        let targetMediaState = ''; 
-        
-        if (state.videoNotAvailable) {
-            targetMediaState = 'not_available';
-        } else {
-            if (mediaChanged) {
-                if (state.mediaSource) {
-                    targetMediaState = 'loading'; 
-                } else {
-                    targetMediaState = 'default'; 
-                }
-            } else if (currentMediaState === null || (notAvailableChanged && currentMediaState === 'not_available')) {
-                if (state.mediaSource) {
-                    targetMediaState = 'loading';
-                } else {
-                    targetMediaState = 'default';
-                }
-            } else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
-                 applyMediaPlaybackState(state);
+        if (state.mediaNotAvailable) {
+            if (currentMediaState !== 'not_available') {
+                targetMediaType = 'not_available';
+                forceReload = true;
             }
+        } else if (mediaFileChanged) {
+            targetMediaType = 'loading'; // Mostra caricamento, poi `loadMedia` gestirà il tipo corretto
+            forceReload = true;
+        } else if (isInitialMediaLoad || notAvailableToggledOff) {
+            targetMediaType = state.mediaType || 'default';
+            forceReload = true;
         }
-        
-        if (targetMediaState && targetMediaState !== currentMediaState) {
-            loadMedia(targetMediaState, state);
+
+        if (forceReload) {
+            loadMedia(targetMediaType, state);
+        } else if (playbackChanged && (currentMediaState === 'video' || currentMediaState === 'audio')) {
+             applyMediaPlaybackState(state);
         }
         
         lastKnownState = JSON.parse(JSON.stringify(state));
@@ -2074,7 +2291,8 @@ def pagina_visualizzatore():
 @login_required
 def announcement_audio():
     try:
-        return send_file('LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
+        # Assumiamo che il file sia nella stessa cartella di app.py
+        return send_from_directory(BASE_DIR, 'LINEA 3. CORSA DEVIATA..mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'LINEA 3. CORSA DEVIATA..mp3' non è stato trovato!")
         return Response("File audio dell'annuncio non trovato sul server.", status=404)
@@ -2083,68 +2301,93 @@ def announcement_audio():
 @login_required
 def booked_stop_audio():
     try:
-        return send_file('bip.mp3', mimetype='audio/mpeg')
+        # Assumiamo che il file sia nella stessa cartella di app.py
+        return send_from_directory(BASE_DIR, 'bip.mp3', mimetype='audio/mpeg')
     except FileNotFoundError:
         print("ERRORE CRITICO: Il file 'bip.mp3' non è stato trovato!")
         return Response("File audio di prenotazione non trovato sul server.", status=404)
 
-@app.route('/upload-video', methods=['POST'])
+@app.route('/upload-media', methods=['POST'])
 @login_required
-def upload_video():
-    global current_video_file
-    if 'video' not in request.files: return jsonify({'error': 'Nessun file inviato'}), 400
-    file = request.files['video']
-    if file.filename == '': return jsonify({'error': 'Nessun file selezionato'}), 400
+def upload_media():
+    global current_media_file
+    if 'media' not in request.files: 
+        return jsonify({'error': 'Nessun file inviato'}), 400
+        
+    file = request.files['media']
+    if file.filename == '': 
+        return jsonify({'error': 'Nessun file selezionato'}), 400
     
-    if current_video_file['path'] and os.path.exists(current_video_file['path']):
+    # Pulizia del file precedente
+    if current_media_file['path'] and os.path.exists(current_media_file['path']):
         try:
-            os.remove(current_video_file['path'])
+            os.remove(current_media_file['path'])
         except Exception as e:
             print(f"Errore rimozione vecchio file: {e}")
 
     try:
-        temp_dir = tempfile.gettempdir()
-        fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix=f"_{file.filename}")
-        os.close(fd) 
+        # IMPORTANTE: sanificare il nome del file per sicurezza
+        filename = secure_filename(file.filename)
+        new_path = os.path.join(app.config['UPLOADS_FOLDER'], filename)
+        file.save(new_path) 
         
-        file.save(temp_path) 
+        mimetype = file.mimetype or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+        mediaType = None
+        if 'video' in mimetype: mediaType = 'video'
+        elif 'image' in mimetype: mediaType = 'image'
+        elif 'audio' in mimetype: mediaType = 'audio'
         
-        current_video_file = {'path': temp_path, 'mimetype': file.mimetype, 'name': file.filename}
-        print(f"Video salvato in: {temp_path}")
-        return jsonify({'success': True, 'filename': file.filename})
+        # Estrai metadati (titolo, artista, ecc.)
+        metadata = get_media_metadata(new_path, mimetype)
+        
+        current_media_file = {'path': new_path, 'mimetype': mimetype, 'name': filename}
+        print(f"Media salvato in: {new_path} (Tipo: {mediaType})")
+        
+        # Ritorna le info al pannello di controllo
+        return jsonify({
+            'success': True, 
+            'filename': filename,
+            'mediaType': mediaType,
+            'metadata': metadata
+        })
 
     except Exception as e:
         print(f"Errore salvataggio file: {e}")
         return jsonify({'error': 'Errore salvataggio file su server'}), 500
 
-@app.route('/stream-video')
+@app.route('/stream-media')
 @login_required
-def stream_video():
-    if not current_video_file or not current_video_file['path'] or not os.path.exists(current_video_file['path']):
-        print("Errore stream: file non trovato")
+def stream_media():
+    if not current_media_file or not current_media_file['name']:
+        print("Errore stream: nessun file media impostato")
         abort(404)
-
+        
     try:
-        return send_file(
-            current_video_file['path'], 
-            mimetype=current_video_file['mimetype'], 
-            as_attachment=False 
+        # Questo metodo gestisce automaticamente i Range Requests per lo streaming
+        return send_from_directory(
+            app.config['UPLOADS_FOLDER'],
+            current_media_file['name'],
+            mimetype=current_media_file['mimetype'],
+            as_attachment=False
         )
+    except FileNotFoundError:
+        print(f"Errore stream: file non trovato in /uploads: {current_media_file['name']}")
+        abort(404)
     except Exception as e:
         print(f"Errore durante lo streaming del file: {e}")
         abort(500)
 
-@app.route('/clear-video', methods=['POST'])
+@app.route('/clear-media', methods=['POST'])
 @login_required
-def clear_video():
-    global current_video_file
-    if current_video_file['path'] and os.path.exists(current_video_file['path']):
+def clear_media():
+    global current_media_file
+    if current_media_file['path'] and os.path.exists(current_media_file['path']):
         try:
-            os.remove(current_video_file['path'])
-            print(f"File rimosso: {current_video_file['path']}")
+            os.remove(current_media_file['path'])
+            print(f"File rimosso: {current_media_file['path']}")
         except Exception as e:
             print(f"Errore rimozione file: {e}")
-    current_video_file = {'path': None, 'mimetype': None, 'name': None}
+    current_media_file = {'path': None, 'mimetype': None, 'name': None}
     return jsonify({'success': True})
 
 # --- GESTIONE WEBSOCKET ---
@@ -2165,7 +2408,15 @@ def handle_update_all(data):
     if not current_user.is_authenticated: return
     global current_app_state
     if current_app_state is None: current_app_state = {}
+    
+    # Aggiorna lo stato del server con i dati dal pannello
     current_app_state.update(data)
+    
+    # Aggiorna anche i metadati media basati su current_media_file
+    current_app_state['mediaName'] = current_media_file.get('name')
+    current_app_state['mimetype'] = current_media_file.get('mimetype')
+    
+    # Emetti lo stato aggiornato a TUTTI gli altri client (visualizzatori)
     socketio.emit('state_updated', current_app_state, skip_sid=request.sid)
 
 @socketio.on('request_initial_state')
@@ -2181,12 +2432,14 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v20 (FIX MARQUEE 1 SECONDO PAUSA)")
-    print("===================================================================")
+    print("   SERVER HARZAFI v21 (Supporto Media e Streaming Fix)")
+    print("================================A===================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
+    print(f"Media salvati in: {UPLOADS_FOLDER}")
     print("===================================================================")
     try:
+        # Usa allow_unsafe_werkzeug=True per compatibilità con il server di sviluppo
         socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
     except ImportError:
         print("\n--- ATTENZIONE: 'eventlet' non trovato. Eseguo in modalità standard. ---")
