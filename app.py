@@ -1,15 +1,14 @@
 import sys
 import socket
 import re 
-import os # Importato per gestire i file
-import tempfile # Importato per gestire i file temporanei
+import os 
+import tempfile 
 from functools import wraps
 from datetime import datetime, timedelta
 from flask import Flask, Response, request, abort, jsonify, render_template_string, redirect, url_for, flash, send_file
 from flask_socketio import SocketIO
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-# IMPORTANTE: Assicurati di aver installato Flask-WTF con "pip install Flask-WTF"
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField
 from wtforms.validators import DataRequired
@@ -66,10 +65,6 @@ def load_user(user_id):
 
 @app.after_request
 def add_security_headers(response):
-    # QUESTA FUNZIONE (già presente) è CORRETTA.
-    # Impedisce al browser di salvare le pagine nella cache.
-    # Se l'utente preme "Indietro", il browser è costretto a 
-    # richiedere la pagina al server, che verificherà di nuovo il login.
     if request.path != '/login' and not request.path.startswith('/static'):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         response.headers['Pragma'] = 'no-cache'
@@ -92,7 +87,6 @@ def get_local_ip():
 # -------------------------------------------------------------------
 # 2. STATO GLOBALE DELL'APPLICAZIONE
 # -------------------------------------------------------------------
-# Stato predefinito per evitare schermata vuota all'avvio
 current_app_state = {
     "linesData": {},
     "currentLineKey": None,
@@ -105,20 +99,18 @@ current_app_state = {
     "playbackState": "playing",
     "seekAction": None,
     "infoMessages": [],
-    "serviceStatus": "online", # Default 'online'
-    "videoNotAvailable": False, # Default 'false'
+    "serviceStatus": "online", 
+    "videoNotAvailable": False, 
     "announcement": None,
     "stopRequested": None
 }
-# --- MODIFICA: Salviamo il PERCORSO del file, non i dati in memoria ---
 current_video_file = {'path': None, 'mimetype': None, 'name': None}
-# --- FINE MODIFICA ---
 
 # -------------------------------------------------------------------
 # 3. TEMPLATE HTML, CSS e JAVASCRIPT INTEGRATI
 # -------------------------------------------------------------------
 
-# --- PAGINA DI LOGIN (FUNZIONANTE) ---
+# --- PAGINA DI LOGIN ---
 LOGIN_PAGE_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -236,7 +228,7 @@ LOGIN_PAGE_HTML = """
 </html>
 """
 
-# --- PANNELLO DI CONTROLLO (MODIFICATO) ---
+# --- PANNELLO DI CONTROLLO (MODIFICATO CON FORMATTAZIONE TESTO) ---
 PANNELLO_CONTROLLO_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -386,12 +378,11 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             flex-shrink: 0;
         }
         
-        /* === NUOVI STILI PER EDITOR FERMATE === */
         .stop-item { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
         .stop-inputs { flex-grow: 1; display: flex; gap: 10px; }
         .stop-inputs input { width: 100%; }
         .audio-upload-btn {
-            width: 40px !important; /* Sovrascrive .btn */
+            width: 40px !important; 
             height: 40px;
             padding: 8px !important;
             flex-shrink: 0;
@@ -417,7 +408,21 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             padding: 8px !important;
             flex-shrink: 0;
         }
-        /* === FINE NUOVI STILI === */
+        /* STILI PER PULSANTI FORMATTAZIONE */
+        .fmt-btn-group {
+            display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap;
+        }
+        .fmt-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            background: var(--content-background-light);
+            color: var(--text-primary);
+            width: auto;
+        }
+        .fmt-btn:hover { filter: brightness(1.2); }
     </style>
 </head>
 <body>
@@ -518,6 +523,14 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                  </div>
                  <div>
                      <label for="info-messages-input">Messaggi a scorrimento (uno per riga)</label>
+                     <div class="fmt-btn-group">
+                        <button type="button" class="fmt-btn" onclick="insertTag('u')"><u>U</u></button>
+                        <button type="button" class="fmt-btn" onclick="insertTag('b')"><b>B</b></button>
+                        <button type="button" class="fmt-btn" style="color: #FF453A;" onclick="insertColor('#FF453A')">Rosso</button>
+                        <button type="button" class="fmt-btn" style="color: #30D158;" onclick="insertColor('#30D158')">Verde</button>
+                        <button type="button" class="fmt-btn" style="color: #FFD60A;" onclick="insertColor('#FFD60A')">Giallo</button>
+                        <button type="button" class="fmt-btn" style="color: #FFFFFF;" onclick="insertColor('#FFFFFF')">Bianco</button>
+                     </div>
                      <textarea id="info-messages-input" placeholder="Benvenuti a bordo..."></textarea>
                      <button id="save-messages-btn" class="btn-primary" style="margin-top: 10px;">Salva Messaggi</button>
                  </div>
@@ -577,6 +590,31 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
     </dialog>
 
 <script>
+    // FUNZIONI PER FORMATTAZIONE TESTO MESSAGGI
+    function insertTag(tag) {
+        const ta = document.getElementById('info-messages-input');
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const text = ta.value;
+        const selected = text.substring(start, end);
+        const replacement = `<${tag}>${selected}</${tag}>`;
+        ta.value = text.substring(0, start) + replacement + text.substring(end);
+        ta.focus();
+        ta.selectionStart = start + replacement.length;
+        ta.selectionEnd = start + replacement.length;
+    }
+
+    function insertColor(color) {
+        const ta = document.getElementById('info-messages-input');
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const text = ta.value;
+        const selected = text.substring(start, end);
+        const replacement = `<span style="color:${color};">${selected}</span>`;
+        ta.value = text.substring(0, start) + replacement + text.substring(end);
+        ta.focus();
+    }
+
 document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
 
@@ -618,7 +656,6 @@ document.addEventListener('DOMContentLoaded', () => {
             stopRequested: JSON.parse(localStorage.getItem('busSystem-stopRequested') || 'null')
         };
         socket.emit('update_all', state);
-        // Reset one-time actions
         if (state.announcement) localStorage.removeItem('busSystem-playAnnouncement');
         if (state.stopRequested) localStorage.removeItem('busSystem-stopRequested');
         if (state.seekAction) localStorage.removeItem('busSystem-seekAction');
@@ -666,7 +703,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let linesData = {}, currentLineKey = null, currentStopIndex = 0, serviceStatus = 'online';
     let videoNotAvailable = false;
     
-    // Icone SVG per i pulsanti audio
     const iconMicRed = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
     const iconMicGreen = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2.66 0 1.2.54 1.2 1.2l-.01 6.2c0 .66-.53 1.2-1.19 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>';
 
@@ -748,8 +784,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData(); formData.append('video', file);
         const response = await fetchAuthenticated('/upload-video', { method: 'POST', body: formData });
         
-        // --- GESTIONE CARICAMENTO VIDEO ---
-        // 'response' potrebbe essere null se fetchAuthenticated ha gestito un errore 401
         if (response) {
             if (response.ok) {
                 localStorage.setItem('busSystem-mediaSource', 'server'); 
@@ -759,7 +793,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadMediaStatus(); 
                 sendFullStateUpdate();
             } else {
-                // Errore 500 o altro errore dal server (es. disco pieno)
                 try {
                     const errorData = await response.json();
                     alert('Errore caricamento: ' + (errorData.error || 'Errore server sconosciuto'));
@@ -768,10 +801,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-        // --- FINE GESTIONE ---
         
         importVideoBtn.disabled = false; importVideoBtn.textContent = 'Importa Video Locale';
-        videoImporter.value = ''; // Resetta l'input file per permettere di ricaricare lo stesso file
+        videoImporter.value = '';
     }
     async function handleEmbedImport() {
         const rawCode = embedCodeInput.value.trim();
@@ -931,7 +963,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const iframeDoc = previewIframe.contentDocument || previewIframe.contentWindow.document;
                 videoInIframe = iframeDoc.getElementById('ad-video');
                 
-                // === MODIFICA CHIAVE: MUTA TUTTI GLI AUDIO NELL'ANTEPRIMA ===
                 const announcementAudio = iframeDoc.getElementById('announcement-sound');
                 if (announcementAudio) announcementAudio.muted = true;
                 const bookedAudio = iframeDoc.getElementById('booked-sound-viewer');
@@ -940,10 +971,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (stopAudio) stopAudio.muted = true;
                 
                 if (videoInIframe) {
-                    videoInIframe.muted = true; // Rende il video silenzioso nella preview
-                    videoInIframe.pause(); // Lo mette in pausa di default
+                    videoInIframe.muted = true;
+                    videoInIframe.pause();
                     
-                    // Se il video di sfondo esiste (solo per video locali)
                     const videoBgEl = iframeDoc.getElementById('ad-video-bg');
                     if (videoBgEl) videoBgEl.muted = true;
 
@@ -960,7 +990,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
             } catch (e) {
-                console.warn("Contenuto dell'iframe non accessibile. I controlli di riproduzione sono disabilitati.");
+                console.warn("Contenuto dell'iframe non accessibile.");
                 togglePlaybackBtn.disabled = true;
                 togglePlaybackBtn.textContent = 'Riproduzione non controllabile';
             }
@@ -1065,19 +1095,16 @@ document.addEventListener('DOMContentLoaded', () => {
     
     addStopBtn.addEventListener('click', () => addStopToModal());
     
-    // === NUOVO GESTORE EVENTI PER IL MODAL FERMATE (Upload e Rimozione) ===
     stopsListContainer.addEventListener('click', (e) => {
         const audioBtn = e.target.closest('.audio-upload-btn');
         const removeBtn = e.target.closest('.remove-stop-btn');
         
         if (audioBtn) {
-            // Cliccato bottone audio: triggera il file input nascosto
             const stopItem = audioBtn.closest('.stop-item');
             stopItem.querySelector('.stop-audio-input').click();
         }
         
         if (removeBtn) {
-            // Cliccato bottone rimuovi
             if (stopsListContainer.children.length > 1) {
                 removeBtn.closest('.stop-item').remove();
             } else {
@@ -1086,7 +1113,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // === NUOVO GESTORE EVENTI PER IL CARICAMENTO FILE AUDIO ===
     stopsListContainer.addEventListener('change', (e) => {
         if (e.target.classList.contains('stop-audio-input')) {
             const file = e.target.files[0];
@@ -1097,7 +1123,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const base64Audio = event.target.result;
-                    stopItem.dataset.audioData = base64Audio; // Salva Base64
+                    stopItem.dataset.audioData = base64Audio; 
                     audioBtn.classList.remove('status-red');
                     audioBtn.classList.add('status-green');
                     audioBtn.innerHTML = iconMicGreen;
@@ -1107,7 +1133,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // === NUOVA FUNZIONE per aggiungere fermate (con audio) ===
     function addStopToModal(stop = { name: '', subtitle: '', audio: null }) {
         const stopItem = document.createElement('div');
         stopItem.className = 'stop-item';
@@ -1127,7 +1152,6 @@ document.addEventListener('DOMContentLoaded', () => {
             <button type="button" class="btn-danger remove-stop-btn" title="Rimuovi fermata">-</button>
         `;
         
-        // Salva il dato audio (Base64) sul div principale
         if (audioData) {
             stopItem.dataset.audioData = audioData;
         }
@@ -1135,7 +1159,6 @@ document.addEventListener('DOMContentLoaded', () => {
         stopsListContainer.appendChild(stopItem);
     }
     
-    // === MODIFICATO GESTORE SUBMIT FORM (per salvare audio) ===
     lineEditorForm.addEventListener('submit', (e) => {
         e.preventDefault(); 
         const originalId = editLineId.value; 
@@ -1150,8 +1173,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const stops = Array.from(stopsListContainer.querySelectorAll('.stop-item')).map(item => {
             const name = item.querySelector('.stop-name-input').value.trim().toUpperCase();
             const subtitle = item.querySelector('.stop-subtitle-input').value.trim().toUpperCase();
-            const audio = item.dataset.audioData || null; // Recupera Base64
-            return { name, subtitle, audio }; // Nuovo formato
+            const audio = item.dataset.audioData || null;
+            return { name, subtitle, audio };
         }).filter(s => s.name);
         
         if (stops.length === 0) { 
@@ -1187,7 +1210,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </html>
 """
 
-# --- VISUALIZZATORE (MODIFICATO con Modale di Errore) ---
+# --- VISUALIZZATORE (MODIFICATO: LOGO COLORE ORIGINALE, NO LOGO SOTTO, VELOCITÀ COSTANTE) ---
 VISUALIZZATORE_COMPLETO_HTML = """
 <!DOCTYPE html>
 <html lang="it">
@@ -1272,12 +1295,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         #stop-name.enter { animation: slideInFadeIn 0.5s ease-out forwards; }
         #stop-subtitle { font-size: 34px; font-weight: 400; margin: 10px 0 0 0; text-transform: uppercase; opacity: 0.9; }
         
-        .logo {
-            position: absolute; bottom: 40px; right: 50px; width: 220px; opacity: 0;
-            filter: brightness(1.2) contrast(1.1); transition: opacity 0.8s ease;
-        }
-        .logo.visible { opacity: 0.9; }
-
         @keyframes slideInFadeIn { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideInFromTopFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(-100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes slideInFromBottomFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(100px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
@@ -1291,7 +1308,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         
         #video-player-container {
             width: 100%; max-width: 100%; background-color: transparent;
-            /* === Bordi più arrotondati (come richiesto) === */
             border-radius: 40px; 
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             overflow: hidden; display: flex; align-items: center; justify-content: center;
@@ -1306,14 +1322,12 @@ VISUALIZZATORE_COMPLETO_HTML = """
             filter: blur(25px) brightness(0.7);
             z-index: 1;
         }
-        /* === Bordi più arrotondati (come richiesto) === */
         #video-player-container iframe { border-radius: 40px; z-index: 2; }
         .aspect-ratio-16-9 { position: relative; width: 100%; height: 0; padding-top: 56.25%; }
         
         .placeholder-image {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             object-fit: cover; z-index: 2; 
-            /* === Bordi più arrotondati (come richiesto) === */
             border-radius: 40px;
         }
         
@@ -1331,7 +1345,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         @keyframes box-enter { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         @keyframes box-exit { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
 
-        /* === NUOVI STILI PER MODALE ERRORE VIDEO === */
         #video-error-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -1351,7 +1364,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             pointer-events: auto;
         }
         .error-modal-content {
-            background: #1D1D1F; /* Stesso colore del pannello di controllo */
+            background: #1D1D1F; 
             color: #F5F5F7;
             padding: 30px 40px;
             border-radius: 20px;
@@ -1371,7 +1384,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         .error-modal-content .error-icon {
             width: 60px; height: 60px;
             background-color: rgba(255, 69, 58, 0.15);
-            color: #FF453A; /* Colore Danger */
+            color: #FF453A; 
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             margin: 0 auto 20px auto;
@@ -1385,7 +1398,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         }
         .error-modal-content button {
             width: 100%;
-            background: #0A84FF; /* Colore Blue */
+            background: #0A84FF;
             color: white;
             border: none;
             padding: 12px;
@@ -1399,7 +1412,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
             filter: brightness(1.1);
         }
 
-        /* === NUOVI STILI PER BARRA INFORMATIVA INFERIORE === */
         .info-bar {
             position: fixed;
             bottom: 30px;
@@ -1444,7 +1456,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
             overflow: hidden;
             height: 100%;
             position: relative;
-            /* Effetto di dissolvenza ai lati per il testo */
             mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
             -webkit-mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
         }
@@ -1456,12 +1467,12 @@ VISUALIZZATORE_COMPLETO_HTML = """
             font-weight: 700;
             white-space: nowrap;
             will-change: transform;
-            animation: marquee 30s linear infinite;
+            /* Animation set by JS dynamically for constant speed */
         }
         @keyframes marquee { from { transform: translate(100%, -50%); } to { transform: translate(-100%, -50%); } }
 
-        .info-bar-right img { height: 45px; flex-shrink: 0; filter: brightness(0) invert(1); opacity: 0.9; }
-        /* === FINE STILI MODALE === */
+        /* MODIFICA: RIMOSSO FILTRO INVERT PER LOGO COLORE ORIGINALE */
+        .info-bar-right img { height: 45px; flex-shrink: 0; opacity: 1; }
     </style>
 </head>
 <body>
@@ -1492,7 +1503,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         <div id="video-player-container" class="aspect-ratio-16-9"></div>
     </div>
     
-    <img src="https://i.ibb.co/nN5WRrHS/LOGO-HARZAFI.png" alt="Logo Harzafi" class="logo">
     <div id="service-offline-overlay">
         <div class="overlay-content">
             <h2>NESSUN SERVIZIO</h2>
@@ -1500,7 +1510,6 @@ VISUALIZZATORE_COMPLETO_HTML = """
         </div>
     </div>
 
-    <!-- NUOVA BARRA INFORMATIVA INFERIORE -->
     <div class="info-bar">
         <div class="info-bar-left">
             <div id="info-bar-time">--:--</div>
@@ -1529,10 +1538,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const socket = io();
     const videoPlayerContainer = document.getElementById('video-player-container');
     const announcementSound = document.getElementById('announcement-sound');
-    const stopAnnouncementSound = document.getElementById('stop-announcement-sound'); // Nuovo selettore
+    const stopAnnouncementSound = document.getElementById('stop-announcement-sound'); 
     const bookedSoundViewer = document.getElementById('booked-sound-viewer');
-    
-    // --- NUOVO SELETTORE PER MODALE ERRORE ---
     const videoErrorOverlay = document.getElementById('video-error-overlay');
 
     const IMG_DEFAULT = 'https://i.ibb.co/1GnC8ZpN/Pronto-per-eseguire-contenuti-video.jpg';
@@ -1543,7 +1550,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMediaState = null;
     let mediaTimeout = null;
 
-    // --- NUOVO LISTENER PER CHIUDERE IL MODALE ---
     if (videoErrorOverlay) {
         document.getElementById('close-error-modal-btn').addEventListener('click', () => {
             videoErrorOverlay.classList.remove('visible');
@@ -1554,10 +1560,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const videoEl = document.getElementById('ad-video');
         const videoBgEl = document.getElementById('ad-video-bg');
         
-        // Se non c'è un elemento video (es. è un iframe o un'immagine placeholder), non fare nulla
         if (!videoEl && !videoPlayerContainer.querySelector('iframe')) return;
-        
-        // Se è un iframe embed, non possiamo controllare direttamente volume/riproduzione
         if (videoPlayerContainer.querySelector('iframe')) return;
 
         const newVolume = parseFloat(state.volumeLevel);
@@ -1594,7 +1597,6 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const videoEl = document.getElementById('ad-video');
             if (videoEl) {
-                // Aggiungiamo un event listener per la riproduzione in loop
                 videoEl.addEventListener('ended', () => {
                     videoEl.currentTime = 0;
                     videoEl.play().catch(e => console.error("Errore riavvio loop:", e));
@@ -1602,10 +1604,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 videoEl.oncanplay = () => applyMediaPlaybackState(stateToApply);
                 
-                // --- GESTIONE ERRORE MODIFICATA ---
                 videoEl.onerror = () => {
                     console.error("Errore caricamento video locale.");
-                    loadMedia('error', stateToApply); // Chiama il nuovo stato 'error'
+                    loadMedia('error', stateToApply); 
                 };
             }
         }, 600);
@@ -1642,7 +1643,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
                 
             case 'server':
-                // La query string previene la cache del browser dopo un nuovo upload
                 const videoUrl = `/stream-video?t=${state.mediaLastUpdated}`;
                 contentHtml = `
                     <div class="video-background-blur">
@@ -1657,22 +1657,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 showMediaContent(contentHtml, state);
                 break;
                 
-            // --- NUOVA GESTIONE 'error' ---
             case 'error':
-                console.log("Stato errore: mostro modale di errore.");
-                // Invece di mostrare l'immagine 404 per 10s,
-                // mostriamo l'immagine DI DEFAULT e apriamo il modale.
-                
-                // 1. Mostra il placeholder di default
                 contentHtml = `<img src="${IMG_DEFAULT}" class="placeholder-image" alt="Pronto per contenuti video">`;
                 showMediaContent(contentHtml, state);
-                
-                // 2. Apri il modale di errore
                 if (videoErrorOverlay) {
                     videoErrorOverlay.classList.add('visible');
                 }
-                
-                // Rimuoviamo il vecchio timeout di 10 secondi
                 if (mediaTimeout) clearTimeout(mediaTimeout);
                 break;
         }
@@ -1680,7 +1670,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const loaderEl = document.getElementById('loader');
     const containerEl = document.querySelector('.container');
-    const logoEl = document.querySelector('.logo');
     const lineIdEl = document.getElementById('line-id');
     const directionNameEl = document.getElementById('direction-name');
     const stopNameEl = document.getElementById('stop-name');
@@ -1688,7 +1677,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const stopIndicatorEl = document.getElementById('stop-indicator');
     const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
-    // Funzione per audio LINEA (manuale)
     function playAnnouncement() {
         const videoEl = document.getElementById('ad-video');
         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
@@ -1735,11 +1723,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return !isOffline;
     }
     
-    /**
-     * =============================================
-     * FUNZIONE updateDisplay (CON LOGICA AUDIO STOP)
-     * =============================================
-     */
     function updateDisplay(state) {
         if (!checkServiceStatus(state) || !state.linesData) {
             return;
@@ -1749,7 +1732,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         loaderEl.classList.add('hidden');
         containerEl.classList.add('visible');
-        logoEl.classList.add('visible');
         
         const line = state.linesData[state.currentLineKey];
         if (line) {
@@ -1770,19 +1752,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 stopIndicatorEl.className = 'current-stop-indicator exit';
                 stopNameEl.className = 'exit';
                 setTimeout(() => {
-                    updateContent(); // Aggiorna il testo
+                    updateContent(); 
 
-                    // === LOGICA AUDIO STOP (automatico) ===
-                    const newStop = line.stops[state.currentStopIndex]; // Prendi il *nuovo* stop
+                    const newStop = line.stops[state.currentStopIndex]; 
                     if (newStop && newStop.audio) {
-                        // L'audio è caricato come Data URL (Base64)
                         stopAnnouncementSound.src = newStop.audio;
                         stopAnnouncementSound.currentTime = 0;
                         
                         const videoEl = document.getElementById('ad-video');
                         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
                         
-                        // Abbassa il volume del video se è presente
                         if (videoEl && !videoEl.muted) {
                             videoEl.volume = Math.min(originalVolume, 0.15);
                         }
@@ -1793,7 +1772,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (videoEl) videoEl.volume = originalVolume;
                         };
                     }
-                    // === FINE LOGICA AUDIO STOP ===
 
                     stopIndicatorEl.classList.remove('exit');
                     stopNameEl.classList.remove('exit');
@@ -1806,16 +1784,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }, 500);
                 }, 400);
             } else {
-                updateContent(); // Caricamento iniziale, nessun audio
+                updateContent(); 
             }
         }
 
-        // Annuncio LINEA (manuale)
         if (state.announcement && state.announcement.timestamp > (lastKnownState.announcement?.timestamp || 0)) {
             playAnnouncement();
         }
 
-        // Audio PRENOTAZIONE
         if (state.stopRequested && state.stopRequested.timestamp > (lastKnownState.stopRequested?.timestamp || 0)) {
             if (bookedSoundViewer) {
                 bookedSoundViewer.currentTime = 0;
@@ -1823,36 +1799,30 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // === LOGICA GESTIONE MEDIA ===
         const mediaChanged = state.mediaLastUpdated > (lastKnownState.mediaLastUpdated || 0);
         const notAvailableChanged = state.videoNotAvailable !== lastKnownState.videoNotAvailable;
         const playbackChanged = state.playbackState !== lastKnownState.playbackState ||
                                   state.volumeLevel !== lastKnownState.volumeLevel ||
                                   (state.seekAction && state.seekAction.timestamp > (lastKnownState.seekAction?.timestamp || 0));
 
-        let targetMediaState = ''; // Lo stato che VOGLIAMO raggiungere
+        let targetMediaState = ''; 
         
         if (state.videoNotAvailable) {
-            // Caso 1: Priorità massima, "Non Disponibile" è ATTIVO
             targetMediaState = 'not_available';
         } else {
-            // Caso 2: "Non Disponibile" è DISATTIVATO. Decidiamo cosa mostrare.
             if (mediaChanged) {
-                // È appena stato aggiunto/rimosso un media
                 if (state.mediaSource) {
-                    targetMediaState = 'loading'; // Media Aggiunto
+                    targetMediaState = 'loading'; 
                 } else {
-                    targetMediaState = 'default'; // Media Rimosso
+                    targetMediaState = 'default'; 
                 }
             } else if (currentMediaState === null || (notAvailableChanged && currentMediaState === 'not_available')) {
-                // È il caricamento iniziale O il toggle "non disponibile" è stato SPENTO
                 if (state.mediaSource) {
                     targetMediaState = 'loading';
                 } else {
                     targetMediaState = 'default';
                 }
             } else if (playbackChanged && (currentMediaState === 'server' || currentMediaState === 'embed')) {
-                // Caso 3: Solo il playback è cambiato (play/pausa/volume/seek), non serve un reload
                  applyMediaPlaybackState(state);
             }
         }
@@ -1860,21 +1830,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (targetMediaState && targetMediaState !== currentMediaState) {
             loadMedia(targetMediaState, state);
         }
-        // === FINE LOGICA MEDIA ===
         
         lastKnownState = JSON.parse(JSON.stringify(state));
     }
     
-    /**
-     * =============================================
-     * FUNZIONI PER BARRA INFERIORE (OROLOGIO E TESTO)
-     * =============================================
-     */
     function updateClock() {
         const timeEl = document.getElementById('info-bar-time');
         const dateEl = document.getElementById('info-bar-date');
         
-        // Forza il fuso orario di Roma
         const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Europe/Rome"}));
         
         const hours = String(now.getHours()).padStart(2, '0');
@@ -1891,8 +1854,37 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateMarquee(messages) {
         const marqueeEl = document.getElementById('marquee-text');
         if (marqueeEl && messages && messages.length > 0) {
-            // Unisce tutti i messaggi con un separatore visivo per creare un flusso continuo
-            marqueeEl.textContent = messages.join('  •  ') + '  •  ';
+            // Usa innerHTML per permettere formattazione HTML
+            marqueeEl.innerHTML = messages.join('  •  ') + '  •  ';
+            
+            // --- CALCOLO VELOCITÀ COSTANTE ---
+            // Attende un attimo che il DOM si aggiorni per calcolare la larghezza
+            setTimeout(() => {
+                const containerWidth = marqueeEl.parentElement.offsetWidth;
+                const textWidth = marqueeEl.scrollWidth;
+                
+                // PIXELS AL SECONDO (modifica questo valore per cambiare velocità globale)
+                const speed = 100; 
+                
+                // Calcola durata: (spazio da percorrere) / velocità
+                // Lo spazio totale è la larghezza del testo + la larghezza del contenitore (per attraversarlo tutto)
+                // Usiamo solo textWidth se vogliamo che finisca quando l'ultima lettera esce, 
+                // ma per un loop fluido marquee CSS standard, spesso basta regolare in base alla lunghezza.
+                // In questo caso specifico del CSS marquee (translate 100% -> -100%):
+                // La distanza totale è (ContainerWidth + TextWidth) ? No, il transform è relativo all'elemento.
+                
+                // Semplificazione efficace: Durata proporzionale alla larghezza del testo.
+                // Se il testo è lungo 1000px, ci mette 10s. Se è 2000px, ci mette 20s. = Velocità costante.
+                const duration = (textWidth + containerWidth) / speed;
+                
+                // Reset animazione per applicare nuova durata
+                marqueeEl.style.animation = 'none';
+                marqueeEl.offsetHeight; /* trigger reflow */
+                marqueeEl.style.animation = `marquee ${duration}s linear infinite`;
+            }, 100);
+
+        } else if (marqueeEl) {
+            marqueeEl.innerHTML = '';
         }
     }
 
@@ -1913,7 +1905,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMarquee(state.infoMessages);
     });
 
-    setInterval(updateClock, 1000); // Aggiorna l'orologio ogni secondo
+    setInterval(updateClock, 1000); 
 });
 </script>
 </body>
@@ -1921,7 +1913,7 @@ document.addEventListener('DOMContentLoaded', () => {
 """
 
 # -------------------------------------------------------------------
-# 4. ROUTE E API WEBSOCKET (MODIFICATO)
+# 4. ROUTE E API WEBSOCKET
 # -------------------------------------------------------------------
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1983,7 +1975,6 @@ def dashboard():
 @app.route('/visualizzatore')
 @login_required
 def pagina_visualizzatore():
-    # Passiamo il template modificato
     return render_template_string(VISUALIZZATORE_COMPLETO_HTML)
 
 @app.route('/announcement-audio')
@@ -2012,23 +2003,18 @@ def upload_video():
     file = request.files['video']
     if file.filename == '': return jsonify({'error': 'Nessun file selezionato'}), 400
     
-    # --- MODIFICA: Salva su disco, non in memoria ---
-    # 1. Rimuovi il vecchio video se esiste
     if current_video_file['path'] and os.path.exists(current_video_file['path']):
         try:
             os.remove(current_video_file['path'])
         except Exception as e:
             print(f"Errore rimozione vecchio file: {e}")
 
-    # 2. Salva il nuovo file in una directory temporanea
     try:
-        # Crea un nome file temporaneo sicuro
         temp_dir = tempfile.gettempdir()
-        # Usiamo mkstemp per avere un nome unico, poi lo chiudiamo e usiamo il path
         fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix=f"_{file.filename}")
-        os.close(fd) # Chiudiamo il file descriptor, useremo solo il path
+        os.close(fd) 
         
-        file.save(temp_path) # Salva il file in quel path
+        file.save(temp_path) 
         
         current_video_file = {'path': temp_path, 'mimetype': file.mimetype, 'name': file.filename}
         print(f"Video salvato in: {temp_path}")
@@ -2037,47 +2023,38 @@ def upload_video():
     except Exception as e:
         print(f"Errore salvataggio file: {e}")
         return jsonify({'error': 'Errore salvataggio file su server'}), 500
-    # --- FINE MODIFICA ---
 
 @app.route('/stream-video')
 @login_required
 def stream_video():
-    # --- MODIFICA CHIAVE PER STREAMING DA DISCO ---
-    # Il codice precedente (lettura da memoria con gestione manuale del Range) 
-    # è stato sostituito da send_file, che è molto più robusto.
     if not current_video_file or not current_video_file['path'] or not os.path.exists(current_video_file['path']):
         print("Errore stream: file non trovato")
         abort(404)
 
     try:
-        # send_file gestisce automaticamente i 'Range headers' (206 Partial Content)
-        # consentendo lo streaming e il seeking di file di grandi dimensioni.
         return send_file(
             current_video_file['path'], 
             mimetype=current_video_file['mimetype'], 
-            as_attachment=False # Importante per il player video
+            as_attachment=False 
         )
     except Exception as e:
         print(f"Errore durante lo streaming del file: {e}")
         abort(500)
-    # --- FINE MODIFICA ---
 
 @app.route('/clear-video', methods=['POST'])
 @login_required
 def clear_video():
     global current_video_file
-    # --- MODIFICA: Rimuovi file da disco ---
     if current_video_file['path'] and os.path.exists(current_video_file['path']):
         try:
             os.remove(current_video_file['path'])
             print(f"File rimosso: {current_video_file['path']}")
         except Exception as e:
             print(f"Errore rimozione file: {e}")
-    # --- FINE MODIFICA ---
     current_video_file = {'path': None, 'mimetype': None, 'name': None}
     return jsonify({'success': True})
 
-# --- GESTIONE WEBSOCKET (Invariato) ---
+# --- GESTIONE WEBSOCKET ---
 
 @socketio.on('connect')
 def handle_connect():
@@ -2111,15 +2088,13 @@ def handle_request_initial_state():
 if __name__ == '__main__':
     local_ip = get_local_ip()
     print("===================================================================")
-    print("   SERVER HARZAFI v17 (STREAMING DA DISCO E MODALE ERRORE)")
+    print("   SERVER HARZAFI v18 (FORMATTAZIONE TESTO E LOGO FIX)")
     print("===================================================================")
     print(f"Login: http://127.0.0.1:5000/login  |  http://{local_ip}:5000/login")
     print("Credenziali di default: admin / adminpass")
     print("===================================================================")
     try:
-        # Per un ambiente di produzione, si raccomanda l'uso di gunicorn/eventlet
         socketio.run(app, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
     except ImportError:
         print("\n--- ATTENZIONE: 'eventlet' non trovato. Eseguo in modalità standard. ---")
-        print("--- Per la produzione, assicurati di averlo installato. ---")
         socketio.run(app, host='0.0.0.0', port=5000)
