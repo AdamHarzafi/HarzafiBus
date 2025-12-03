@@ -1513,6 +1513,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             transform: translateY(-50%);
             font-size: 32px;
             font-weight: 700;
+            line-height: 1;
             white-space: nowrap;
             will-change: transform;
             /* Animation gestita via JS */
@@ -1649,7 +1650,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Posiziona il testo completamente a destra (fuori schermo)
         marqueeEl.style.transition = 'none';
-        marqueeEl.style.transform = `translateX(${containerWidth}px)`;
+        marqueeEl.style.transform = `translate(${containerWidth}px, -50%)`;
 
         // Forza un reflow per applicare la posizione iniziale
         marqueeEl.offsetHeight;
@@ -1660,7 +1661,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Avvia l'animazione verso sinistra (fuori schermo)
         marqueeEl.style.transition = `transform ${duration}s linear`;
-        marqueeEl.style.transform = `translateX(-${textWidth}px)`;
+        marqueeEl.style.transform = `translate(-${textWidth}px, -50%)`;
 
         // Quando l'animazione finisce...
         const onAnimationEnd = () => {
@@ -2191,4 +2192,3 @@ if __name__ == '__main__':
     except ImportError:
         print("\n--- ATTENZIONE: 'eventlet' non trovato. Eseguo in modalità standard. ---")
         socketio.run(app, host='0.0.0.0', port=5000)
-
