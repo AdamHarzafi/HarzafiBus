@@ -1519,12 +1519,22 @@ VISUALIZZATORE_COMPLETO_HTML = """
             /* Animation gestita via JS */
         }
 
+
+        .info-bar-right {
+            display: flex;           /* Rende il contenitore flessibile */
+            align-items: center;     /* Centra verticalmente il contenuto */
+            justify-content: center; /* Centra orizzontalmente */
+            height: 100%;            /* Usa tutta l'altezza della barra */
+        }
+
         .info-bar-right img { 
+            display: block;          /* Rimuove i margini fantasma del testo */
             height: 45px; 
             flex-shrink: 0; 
             opacity: 1; 
             filter: brightness(0) invert(1);
         }
+
     </style>
 </head>
 <body>
