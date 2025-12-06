@@ -606,6 +606,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
             <input type="hidden" id="edit-line-id">
             <div class="control-group"><label for="line-name">Nome Linea</label><input type="text" id="line-name" required></div>
             <div class="control-group">
+
                 <label>Audio Annuncio Linea</label>
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <input type="file" id="line-announcement-audio-input" accept="audio/mpeg,audio/mp3" style="display: none;">
@@ -615,6 +616,7 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
                 <p id="line-announcement-filename" style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;"></p>
             </div>
             <div class="control-group"><label for="line-direction">Destinazione</label><input type="text" id="line-direction" required></div>
+            <div class="control-group"><label for="line-direction-subtitle">Sottotitolo Destinazione (Opzionale)</label><input type="text" id="line-direction-subtitle"></div>
             <div id="stops-editor">
                 <label>Fermate (Nome, Sottotitolo, Audio)</label>
                 <div id="stops-list" style="max-height: 250px; overflow-y: auto; padding-right: 10px;"></div>
@@ -706,6 +708,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lineAnnouncementStatusIcon = document.getElementById('line-announcement-status-icon');
     const lineAnnouncementFilename = document.getElementById('line-announcement-filename');
     const lineDirectionInput = document.getElementById('line-direction');
+    const lineDirectionSubtitleInput = document.getElementById('line-direction-subtitle');
     const stopsListContainer = document.getElementById('stops-list');
     const addStopBtn = document.getElementById('add-stop-btn');
     const statusLineName = document.getElementById('status-line-name');
@@ -737,7 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getDefaultData() {
         return {
-            "3": { "direction": "CORSA DEVIATA", "announcementAudio": null, "stops": [
+            "3": { "direction": "CORSA DEVIATA", "directionSubtitle": "PERCORSO ALTERNATIVO", "announcementAudio": null, "stops": [
                 { "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }, 
                 { "name": "PRIMULE", "subtitle": "", "audio": null }, 
                 { "name": "PERVINCHE", "subtitle": "", "audio": null }, 
@@ -1145,7 +1148,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
         if (target.classList.contains('edit-btn')) {
             editLineId.value = lineId; document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; const line = linesData[lineId];
-            lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; 
+            lineNameInput.value = lineId; 
+            lineDirectionInput.value = line.direction; 
+            lineDirectionSubtitleInput.value = line.directionSubtitle || '';
+            stopsListContainer.innerHTML = ''; 
             updateLineAnnouncementUI(line.announcementAudio);
             (line.stops || []).forEach(s => addStopToModal(s)); 
             modal.showModal();
@@ -1258,6 +1264,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const originalId = editLineId.value; 
         const newId = lineNameInput.value.trim().toUpperCase(); 
         const direction = lineDirectionInput.value.trim();
+        const directionSubtitle = lineDirectionSubtitleInput.value.trim().toUpperCase();
         const announcementAudio = lineEditorForm.dataset.announcementAudio || null;
         
         if (!newId || !direction) { 
@@ -1280,7 +1287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (originalId && originalId !== newId) {
             delete linesData[originalId]; 
         }
-        linesData[newId] = { direction, stops, announcementAudio }; 
+        linesData[newId] = { direction, directionSubtitle, stops, announcementAudio }; 
         saveData();
         
         if (currentLineKey === originalId) { 
@@ -1384,6 +1391,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         .text-content { padding-left: 70px; width: 100%; overflow: hidden; }
         .direction-header { font-size: 24px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
         #direction-name { font-size: 56px; font-weight: 900; margin: 5px 0 60px 0; text-transform: uppercase; }
+        #direction-subtitle { font-size: 32px; font-weight: 700; margin: -50px 0 60px 0; text-transform: uppercase; opacity: 0.85; color: #E5E5E5; }
         .next-stop-header { font-size: 22px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
         #stop-name { font-size: 112px; font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase; white-space: normal; opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
         #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
@@ -1602,6 +1610,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
             <div class="text-content">
                 <p class="direction-header">DESTINAZIONE - DESTINATION</p>
                 <h1 id="direction-name"></h1>
+                <h3 id="direction-subtitle"></h3>
                 <p class="next-stop-header">PROSSIMA FERMATA - NEXT STOP</p>
                 <h2 id="stop-name"></h2>
                 <p id="stop-subtitle"></p>
@@ -1859,6 +1868,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const containerEl = document.querySelector('.container');
     const lineIdEl = document.getElementById('line-id');
     const directionNameEl = document.getElementById('direction-name');
+    const directionSubtitleEl = document.getElementById('direction-subtitle');
     const stopNameEl = document.getElementById('stop-name');
     const stopSubtitleEl = document.getElementById('stop-subtitle');
     const stopIndicatorEl = document.getElementById('stop-indicator');
@@ -1939,6 +1949,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const updateContent = () => {
                 lineIdEl.textContent = state.currentLineKey;
                 directionNameEl.textContent = line.direction;
+                directionSubtitleEl.textContent = line.directionSubtitle || '';
                 stopNameEl.textContent = stop ? stop.name : 'CAPOLINEA';
                 stopSubtitleEl.textContent = stop ? (stop.subtitle || '') : '';
                 adjustFontSize(stopNameEl);
