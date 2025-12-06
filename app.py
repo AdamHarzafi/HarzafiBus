@@ -605,6 +605,15 @@ PANNELLO_CONTROLLO_COMPLETO_HTML = """
         <form id="line-editor-form">
             <input type="hidden" id="edit-line-id">
             <div class="control-group"><label for="line-name">Nome Linea</label><input type="text" id="line-name" required></div>
+            <div class="control-group">
+                <label>Audio Annuncio Linea</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="file" id="line-announcement-audio-input" accept="audio/mpeg,audio/mp3" style="display: none;">
+                    <button type="button" id="line-announcement-upload-btn" class="btn-secondary" style="width: auto; flex-grow: 1;">Carica Audio Annuncio Linea</button>
+                    <span id="line-announcement-status-icon" style="font-size: 24px;"></span>
+                </div>
+                <p id="line-announcement-filename" style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;"></p>
+            </div>
             <div class="control-group"><label for="line-direction">Destinazione</label><input type="text" id="line-direction" required></div>
             <div id="stops-editor">
                 <label>Fermate (Nome, Sottotitolo, Audio)</label>
@@ -692,6 +701,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const lineEditorForm = document.getElementById('line-editor-form');
     const editLineId = document.getElementById('edit-line-id');
     const lineNameInput = document.getElementById('line-name');
+    const lineAnnouncementAudioInput = document.getElementById('line-announcement-audio-input');
+    const lineAnnouncementUploadBtn = document.getElementById('line-announcement-upload-btn');
+    const lineAnnouncementStatusIcon = document.getElementById('line-announcement-status-icon');
+    const lineAnnouncementFilename = document.getElementById('line-announcement-filename');
     const lineDirectionInput = document.getElementById('line-direction');
     const stopsListContainer = document.getElementById('stops-list');
     const addStopBtn = document.getElementById('add-stop-btn');
@@ -724,7 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getDefaultData() {
         return {
-            "3": { "direction": "CORSA DEVIATA", "stops": [
+            "3": { "direction": "CORSA DEVIATA", "announcementAudio": null, "stops": [
                 { "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }, 
                 { "name": "PRIMULE", "subtitle": "", "audio": null }, 
                 { "name": "PERVINCHE", "subtitle": "", "audio": null }, 
@@ -1083,8 +1096,10 @@ document.addEventListener('DOMContentLoaded', () => {
     prevBtn.addEventListener('click', () => { if (currentStopIndex > 0) { currentStopIndex--; updateAndRenderStatus(); } });
     announceBtn.addEventListener('click', () => { 
         if (currentLineKey && linesData[currentLineKey]) {
-            localStorage.setItem('busSystem-playAnnouncement', JSON.stringify({ timestamp: Date.now() })); 
+            const announcementAudioData = linesData[currentLineKey].announcementAudio || null;
+            localStorage.setItem('busSystem-playAnnouncement', JSON.stringify({ timestamp: Date.now(), audioData: announcementAudioData })); 
             sendFullStateUpdate();
+            // Se l'audio è null, il visualizzatore userà il file di default
         } else { alert('Nessuna linea attiva selezionata.'); } 
     });
     serviceStatusToggle.addEventListener('change', () => { serviceStatus = serviceStatusToggle.checked ? 'online' : 'offline'; saveServiceStatus(); renderServiceStatus(); });
@@ -1120,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('edit-line-id').value = ''; 
         document.getElementById('modal-title').textContent = 'Aggiungi Nuova Linea'; 
         lineEditorForm.reset(); 
+        resetLineAnnouncementUI();
         stopsListContainer.innerHTML = ''; 
         addStopToModal(); 
         modal.showModal(); 
@@ -1130,6 +1146,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (target.classList.contains('edit-btn')) {
             editLineId.value = lineId; document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; const line = linesData[lineId];
             lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; 
+            updateLineAnnouncementUI(line.announcementAudio);
             (line.stops || []).forEach(s => addStopToModal(s)); 
             modal.showModal();
         } if (target.classList.contains('delete-btn')) { 
@@ -1141,6 +1158,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
+    // --- LOGICA PER AUDIO ANNUNCIO LINEA ---
+    lineAnnouncementUploadBtn.addEventListener('click', () => {
+        lineAnnouncementAudioInput.click();
+    });
+
+    lineAnnouncementAudioInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const base64Audio = event.target.result;
+                lineEditorForm.dataset.announcementAudio = base64Audio; // Salva temporaneamente sul form
+                updateLineAnnouncementUI(base64Audio, file.name);
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function resetLineAnnouncementUI() {
+        lineEditorForm.dataset.announcementAudio = '';
+        lineAnnouncementStatusIcon.textContent = '⚪️';
+        lineAnnouncementFilename.textContent = 'Nessun audio caricato.';
+    }
+
+    function updateLineAnnouncementUI(audioData, fileName = 'Audio personalizzato') {
+        lineEditorForm.dataset.announcementAudio = audioData || '';
+        lineAnnouncementStatusIcon.textContent = audioData ? '🟢' : '⚪️';
+        lineAnnouncementFilename.textContent = audioData ? fileName : 'Nessun audio caricato.';
+    }
     addStopBtn.addEventListener('click', () => addStopToModal());
     
     stopsListContainer.addEventListener('click', (e) => {
@@ -1212,6 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const originalId = editLineId.value; 
         const newId = lineNameInput.value.trim().toUpperCase(); 
         const direction = lineDirectionInput.value.trim();
+        const announcementAudio = lineEditorForm.dataset.announcementAudio || null;
         
         if (!newId || !direction) { 
             alert('Nome linea e destinazione sono obbligatori.'); 
@@ -1233,7 +1280,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (originalId && originalId !== newId) {
             delete linesData[originalId]; 
         }
-        linesData[newId] = { direction, stops }; 
+        linesData[newId] = { direction, stops, announcementAudio }; 
         saveData();
         
         if (currentLineKey === originalId) { 
@@ -1818,21 +1865,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const serviceOfflineOverlay = document.getElementById('service-offline-overlay');
 
     function playAnnouncement() {
+        const announcementData = lastKnownState.announcement;
+        if (!announcementData) return;
+
         const videoEl = document.getElementById('ad-video');
         const originalVolume = parseFloat(lastKnownState.volumeLevel || 1.0);
         
+        // Se c'è un audio personalizzato, usa quello. Altrimenti, usa il file di fallback.
+        if (announcementData.audioData) {
+            announcementSound.src = announcementData.audioData;
+        } else {
+            announcementSound.src = "{{ url_for('announcement_audio') }}";
+        }
+
         if (videoEl && !videoEl.muted) {
             videoEl.volume = Math.min(originalVolume, 0.15);
         }
         
         announcementSound.currentTime = 0;
         announcementSound.play().catch(e => console.error("Errore riproduzione annuncio:", e));
-        
+
         announcementSound.onended = () => {
             if (videoEl) {
                 videoEl.volume = originalVolume;
             }
-        };
+        }; 
     }
 
     function adjustFontSize(element) {
