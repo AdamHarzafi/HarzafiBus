@@ -1391,7 +1391,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         .text-content { padding-left: 70px; width: 100%; overflow: hidden; }
         .direction-header { font-size: 24px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
         #direction-name { font-size: 56px; font-weight: 900; margin: 5px 0 60px 0; text-transform: uppercase; }
-        #direction-subtitle { font-size: 32px; font-weight: 700; margin: -50px 0 60px 0; text-transform: uppercase; opacity: 0.85; color: #E5E5E5; }
+        #direction-subtitle { font-size: 32px; font-weight: 700; margin: -50px 0 60px 0; text-transform: uppercase; opacity: 1; color: #FFFFFF; }
         .next-stop-header { font-size: 22px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
         #stop-name { font-size: 112px; font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase; white-space: normal; opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
         #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
