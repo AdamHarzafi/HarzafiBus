@@ -740,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getDefaultData() {
         return {
+            "3": { "direction": "CORSA DEVIATA", "stops": [
             "3": { "direction": "CORSA DEVIATA", "directionSubtitle": "PERCORSO ALTERNATIVO", "announcementAudio": null, "stops": [
                 { "name": "VALLETTE", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }, 
                 { "name": "PRIMULE", "subtitle": "", "audio": null }, 
@@ -1099,6 +1100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     prevBtn.addEventListener('click', () => { if (currentStopIndex > 0) { currentStopIndex--; updateAndRenderStatus(); } });
     announceBtn.addEventListener('click', () => { 
         if (currentLineKey && linesData[currentLineKey]) {
+            localStorage.setItem('busSystem-playAnnouncement', JSON.stringify({ timestamp: Date.now() })); 
             const announcementAudioData = linesData[currentLineKey].announcementAudio || null;
             localStorage.setItem('busSystem-playAnnouncement', JSON.stringify({ timestamp: Date.now(), audioData: announcementAudioData })); 
             sendFullStateUpdate();
@@ -1148,6 +1150,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = e.target.closest('button'); if (!target) return; const lineId = target.dataset.id;
         if (target.classList.contains('edit-btn')) {
             editLineId.value = lineId; document.getElementById('modal-title').textContent = `Modifica Linea: ${lineId}`; const line = linesData[lineId];
+            lineNameInput.value = lineId; lineDirectionInput.value = line.direction; stopsListContainer.innerHTML = ''; 
             lineNameInput.value = lineId; 
             lineDirectionInput.value = line.direction; 
             lineDirectionSubtitleInput.value = line.directionSubtitle || '';
@@ -1287,6 +1290,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (originalId && originalId !== newId) {
             delete linesData[originalId]; 
         }
+        linesData[newId] = { direction, stops }; 
         linesData[newId] = { direction, directionSubtitle, stops, announcementAudio }; 
         saveData();
         
@@ -1391,7 +1395,7 @@ VISUALIZZATORE_COMPLETO_HTML = """
         .text-content { padding-left: 70px; width: 100%; overflow: hidden; }
         .direction-header { font-size: 24px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
         #direction-name { font-size: 56px; font-weight: 900; margin: 5px 0 60px 0; text-transform: uppercase; }
-        #direction-subtitle { font-size: 32px; font-weight: 700; margin: -50px 0 60px 0; text-transform: uppercase; opacity: 0.85; color: #E5E5E5; }
+        #direction-subtitle { font-size: 32px; font-weight: 700; margin: -50px 0 60px 0; text-transform: uppercase; opacity: 0.9; color: #FFFFFF; }
         .next-stop-header { font-size: 22px; font-weight: 700; opacity: 0.8; margin: 0; text-transform: uppercase; }
         #stop-name { font-size: 112px; font-weight: 900; margin: 0; line-height: 1.1; text-transform: uppercase; white-space: normal; opacity: 1; transform: translateY(0); transition: opacity 0.3s ease-out, transform 0.3s ease-out; }
         #stop-name.exit { opacity: 0; transform: translateY(-30px); transition: opacity 0.3s ease-in, transform 0.3s ease-in; }
@@ -1894,11 +1898,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         announcementSound.currentTime = 0;
         announcementSound.play().catch(e => console.error("Errore riproduzione annuncio:", e));
+        
 
         announcementSound.onended = () => {
             if (videoEl) {
                 videoEl.volume = originalVolume;
             }
+        };
         }; 
     }
 
