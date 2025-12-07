@@ -768,52 +768,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { "name": "OSPEDALE GRADENIGO", "subtitle": "", "audio": null }, 
                 { "name": "TORTONA", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }
             ]}
-            "11": { "direction": "CROCETTA", "directionSubtitle": "CORSO STATI UNITI", "announcementAudio": null, "stops": [
-                { "name": "DE GASPERI", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }, 
-                { "name": "SAN GIUSEPPE", "subtitle": "", "audio": null }, 
-                { "name": "IV NOVEMBRE", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }, 
-                { "name": "FILZI", "subtitle": "", "audio": null }, 
-                { "name": "STAZIONE VENARIA", "subtitle": "", "audio": null }, 
-                { "name": "PIAVE", "subtitle": "", "audio": null }, 
-                { "name": "ATZEI", "subtitle": "", "audio": null }, 
-                { "name": "DIAZ NORD", "subtitle": "", "audio": null }, 
-                { "name": "DI VITTORIO", "subtitle": "", "audio": null }, 
-                { "name": "BUOZZI", "subtitle": "", "audio": null }, 
-                { "name": "TANGENZIALE", "subtitle": "", "audio": null }, 
-                { "name": "SANDRE", "subtitle": "", "audio": null }, 
-                { "name": "STAZIONE RIGOLA", "subtitle": "", "audio": null }, 
-                { "name": "STABILIMENTO GTT VENARIA", "subtitle": "", "audio": null }, 
-                { "name": "STAMPALIA", "subtitle": "", "audio": null }, 
-                { "name": "CALTANISSETA", "subtitle": "", "audio": null }, 
-                { "name": "BROSSO", "subtitle": "", "audio": null }, 
-                { "name": "GROSSETO NORD", "subtitle": "", "audio": null }, 
-                { "name": "MADONNA DI CAMPAGNA", "subtitle": "", "audio": null }, 
-                { "name": "V CIRCOSCRIZIONE", "subtitle": "", "audio": null }, 
-                { "name": "BREGLIO", "subtitle": "", "audio": null }, 
-                { "name": "LARGO GIACHINO NORD", "subtitle": "", "audio": null }, 
-                { "name": "LARGO GIACHINO SUD", "subtitle": "", "audio": null }, 
-                { "name": "VITTORIA", "subtitle": "", "audio": null }, 
-                { "name": "CHIESA DELLA SALUTE", "subtitle": "", "audio": null }, 
-                { "name": "BALDISSERA NORD", "subtitle": "", "audio": null },
-                { "name": "BALDISSERA", "subtitle": "", "audio": null },
-                { "name": "CUNEO", "subtitle": "", "audio": null },
-                { "name": "VERCELLI", "subtitle": "", "audio": null },
-                { "name": "EMILIA", "subtitle": "", "audio": null },
-                { "name": "BORGO DORA", "subtitle": "", "audio": null },
-                { "name": "DORA SAVONA", "subtitle": "", "audio": null },
-                { "name": "FIOCCHETTO", "subtitle": "AUTOSTAZIONE DORA", "audio": null },
-                { "name": "PORTA PALAZZO SUD", "subtitle": "", "audio": null },
-                { "name": "CORTE D'APPELLO", "subtitle": "", "audio": null },
-                { "name": "MONTE DI PIETA'", "subtitle": "", "audio": null },
-                { "name": "BERTOLA", "subtitle": "", "audio": null },
-                { "name": "ARCIVESCOVADO", "subtitle": "POSTE CENTRALI - CONSIGLIO COMUNALE - ISPETTORATO DEL LAVORO", "audio": null },
-                { "name": "SAN QUINTINO", "subtitle": "", "audio": null },
-                { "name": "PORTA NUOVA", "subtitle": "M1", "audio": null },
-                { "name": "MASSENA", "subtitle": "", "audio": null },
-                { "name": "STATI UNITI", "subtitle": "CAPOLINEA - TERMINAL", "audio": null }
-            ]}
         };
-        
     }
 
     function loadData() { linesData = JSON.parse(localStorage.getItem('busSystem-linesData')) || getDefaultData(); saveData(); }
